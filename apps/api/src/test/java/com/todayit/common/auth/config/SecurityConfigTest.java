@@ -125,6 +125,16 @@ public class SecurityConfigTest {
   }
 
   @Test
+  @DisplayName("애플리케이션 liveness API는 인증 없이 접근할 수 있다")
+  void allowsAnonymousAccessToLivenessEndpoint() throws Exception {
+    // When
+    ResultActions result = mockMvc.perform(get("/actuator/health/liveness"));
+
+    // Then
+    result.andExpect(status().isOk());
+  }
+
+  @Test
   @DisplayName("인증되지 않은 사용자가 보호 API에 접근하면 401을 반환한다")
   void returnsUnauthorizedWhenAnonymousUserAccessesProtectedEndpoint() throws Exception {
     // Given

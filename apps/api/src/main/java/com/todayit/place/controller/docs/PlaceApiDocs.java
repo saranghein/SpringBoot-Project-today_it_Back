@@ -303,7 +303,15 @@ public interface PlaceApiDocs {
   ResponseEntity<CommonResponse<PlaceScrapResponse>> cancelPlaceScrap(
       int placeId, Authentication authentication);
 
-  /** 특정 장소의 공개 코스 목록을 조회합니다. */
+  /**
+   * 특정 장소의 공개 코스 목록을 조회합니다.
+   *
+   * @param placeId 장소 식별자
+   * @param page 페이지 번호
+   * @param size 페이지 크기
+   * @param sort 정렬 기준
+   * @return 장소를 포함한 공개 코스 목록과 페이지 정보
+   */
   @Operation(summary = "장소별 코스 조회", description = "특정 장소를 포함한 공개 코스 목록을 페이지 단위로 조회합니다.")
   @ApiResponses({
     @ApiResponse(
@@ -353,7 +361,13 @@ public interface PlaceApiDocs {
   ResponseEntity<CommonResponse<PageResponse<CourseResponse>>> findCoursesByPlace(
       int placeId, int page, int size, CourseSort sort);
 
-  /** 인증된 회원의 장소 좋아요를 생성합니다. */
+  /**
+   * 인증된 회원의 장소 좋아요를 생성합니다.
+   *
+   * @param placeId 장소 식별자
+   * @param authentication 인증된 회원 정보
+   * @return 장소 좋아요 결과
+   */
   @Operation(
       summary = "장소 좋아요",
       description = "인증된 회원의 장소 좋아요를 생성합니다.",

@@ -1,0 +1,187 @@
+name: todayit
+
+services:
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NGINX_ENVSUBST_FILTER: PUBLIC_IP
+      PUBLIC_IP: ${PUBLIC_IP:-127.0.0.1}
+    volumes:
+      - ../nginx/${NGINX_CONFIG:-bootstrap}.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${DATA_ROOT:-./data}/certbot-webroot:/var/www/certbot:ro
+      - ${DATA_ROOT:-./data}/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - edge
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  certbot:
+    image: certbot/certbot:v5.4.0
+    profiles: ["ops"]
+    volumes:
+      - ${DATA_ROOT:-./data}/certbot-webroot:/var/www/certbot
+      - ${DATA_ROOT:-./data}/letsencrypt:/etc/letsencrypt
+
+  api:
+    image: ${API_IMAGE:-todayit-api:local}
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-todayit}?currentSchema=todayit
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-todayit_app}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health
+      TODAYIT_SECURITY_CORS_ORIGINS_0: ${CORS_ALLOWED_ORIGIN:-http://localhost:5173}
+      TODAYIT_SECURITY_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      TODAYIT_SECURITY_JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-30m}
+      OPENAPI_ENABLED: ${OPENAPI_ENABLED:-false}
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx512m
+    expose:
+      - "8080"
+    networks:
+      - edge
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--spider",
+          "http://localhost:8080/actuator/health/liveness",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  data-worker:
+    image: ${DATA_WORKER_IMAGE:-todayit-data-worker:local}
+    profiles: ["worker"]
+    restart: "no"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-todayit}?currentSchema=todayit
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-todayit_app}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      SPRING_FLYWAY_ENABLED: "false"
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx320m
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-todayit}
+      POSTGRES_USER: ${POSTGRES_USER:-todayit_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - ${DATA_ROOT:-./data}/postgres:/var/lib/postgresql/data
+      - ${DATA_ROOT:-./data}/backups:/backups
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - ${DATA_ROOT:-./data}/redis:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+networks:
+  edge:
+  backend:
+    internal: true

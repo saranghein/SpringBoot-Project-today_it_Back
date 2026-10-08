@@ -1,0 +1,12 @@
+services:
+  api:
+    image: todayit-api:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/api.Dockerfile
+
+  data-worker:
+    image: todayit-data-worker:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/data-worker.Dockerfile
