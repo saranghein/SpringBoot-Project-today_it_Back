@@ -17,9 +17,7 @@ concurrency:
 jobs:
   verify:
     name: 배포 전 전체 검사
-    if: >
-      github.ref == 'refs/heads/develop' ||
-      github.ref == 'refs/heads/devops/13-aws-setting'
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
 
     steps:
