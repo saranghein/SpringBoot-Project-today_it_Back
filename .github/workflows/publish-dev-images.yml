@@ -1,9 +1,9 @@
 name: 개발 컨테이너 이미지 게시
 
 on:
-  push:
-    branches:
-      - develop
+#  push:
+#    branches:
+#      - develop
 
   workflow_dispatch:
 
@@ -17,7 +17,9 @@ concurrency:
 jobs:
   verify:
     name: 배포 전 전체 검사
-    if: github.ref == 'refs/heads/develop'
+    if: >
+      github.ref == 'refs/heads/develop' ||
+      github.ref == 'refs/heads/devops/13-aws-setting'
     runs-on: ubuntu-latest
 
     steps:
@@ -33,7 +35,7 @@ jobs:
           java-version: 21
 
       - name: Gradle 설정
-        uses: gradle/actions/setup-gradle@07d1f8453baaff67fb503883367f8b13e6158a54 # v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Gradle Wrapper 실행 권한 설정
         run: chmod +x gradlew
