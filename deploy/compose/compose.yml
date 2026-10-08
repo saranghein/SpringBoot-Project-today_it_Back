@@ -45,7 +45,9 @@ services:
     image: ${API_IMAGE:-todayit-api:local}
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-todayit}?currentSchema=todayit
+      SPRING_PROFILES_ACTIVE: dev
+      DB_SCHEMA: ${POSTGRES_DB_SCHEMA:-todayit}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-todayit}?currentSchema=${POSTGRES_DB_SCHEMA:-todayit}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-todayit_app}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
@@ -97,7 +99,9 @@ services:
     profiles: ["worker"]
     restart: "no"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-todayit}?currentSchema=todayit
+      SPRING_PROFILES_ACTIVE: dev
+      DB_SCHEMA: ${POSTGRES_DB_SCHEMA:-todayit}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-todayit}?currentSchema=${POSTGRES_DB_SCHEMA:-todayit}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-todayit_app}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       SPRING_FLYWAY_ENABLED: "false"
