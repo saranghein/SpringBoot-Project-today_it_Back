@@ -35,6 +35,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -42,6 +43,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 // Spring Security 접근 정책, 인증 인가 실패 응답 테스트
+@ActiveProfiles("test")
 @SpringBootTest(properties = "todayit.security.cors.origins[0]=https://frontend.test")
 @AutoConfigureMockMvc
 @Import({

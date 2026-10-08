@@ -9,7 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
-@ActiveProfiles("local")
+@ActiveProfiles({"test", "local"})
 @SpringBootTest(
     properties = {
       "spring.datasource.url=jdbc:h2:mem:local_seed;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -27,9 +27,9 @@ class FlywayLocalSeedTest {
         jdbcTemplate.queryForList(
             """
             SELECT roles.name
-            FROM member_roles
-            JOIN roles ON roles.roles_id = member_roles.roles_id
-            JOIN member ON member.member_id = member_roles.member_id
+            FROM "todayit".member_roles
+            JOIN "todayit".roles ON roles.roles_id = member_roles.roles_id
+            JOIN "todayit".member ON member.member_id = member_roles.member_id
             WHERE member.email IN (
                 'user@todayit.local',
                 'admin@todayit.local',

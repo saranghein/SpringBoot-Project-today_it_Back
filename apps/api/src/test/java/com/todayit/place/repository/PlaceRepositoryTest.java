@@ -8,26 +8,29 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/**
- * PostgreSQL 장소 목록 조회 Repository의 조건과 페이징을 검증합니다.
- *
- * <p>테스트 실행 전에 PostgreSQL의 todayit 데이터베이스와 todayit 스키마가 필요합니다.
- */
-@SpringBootTest(
-    properties = {
-      "spring.datasource.url=jdbc:postgresql://localhost:5432/todayit?currentSchema=todayit",
-      "spring.datasource.username=todayit_user",
-      "spring.datasource.password=todayit1234",
-      "spring.flyway.enabled=true",
-      "spring.flyway.locations=classpath:db/migration",
-      "spring.jpa.hibernate.ddl-auto=none"
-    })
+/** PostgreSQL 장소 목록 조회 Repository의 조건과 페이징을 검증합니다. */
+@Testcontainers
+@ActiveProfiles("test")
+@SpringBootTest
 class PlaceRepositoryTest {
+
+  @Container @ServiceConnection
+  static final PostgreSQLContainer POSTGRESQL =
+      new PostgreSQLContainer("postgres:17-alpine")
+          .withDatabaseName("todayit")
+          .withUsername("todayit_user")
+          .withPassword("todayit1234")
+          .withUrlParam("currentSchema", "todayit");
 
   @Autowired private PlaceRepository placeRepository;
 

@@ -8,6 +8,7 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import org.springframework.stereotype.Controller;
 
 @AnalyzeClasses(packages = "com.todayit", importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
@@ -50,7 +51,9 @@ class ArchitectureTest {
   static final ArchRule CONTROLLERS_SHOULD_USE_CONTROLLER_SUFFIX =
       classes()
           .that()
-          .resideInAPackage("..controller..")
+          .areAnnotatedWith(Controller.class)
+          .or()
+          .areMetaAnnotatedWith(Controller.class)
           .should()
           .haveSimpleNameEndingWith("Controller")
           .allowEmptyShould(true);

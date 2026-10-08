@@ -1,0 +1,10 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+todayit:
+  security:
+    jwt:
+      secret: 01234567890123456789012345678901
+      access-token-expiration: 30m
