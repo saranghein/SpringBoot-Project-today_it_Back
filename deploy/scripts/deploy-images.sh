@@ -27,7 +27,7 @@ rollback() {
 
   log "API 상태 확인 실패: 이전 이미지로 롤백합니다."
   docker image tag "$previous_image_id" "$api_image"
-  "${compose[@]}" up -d --no-build --no-deps api
+  "${compose[@]}" up -d --force-recreate --no-build --no-deps api
 }
 
 for required_file in "$compose_file" "$env_file"; do
@@ -51,10 +51,14 @@ fi
 
 "${compose[@]}" config --quiet
 
-previous_container="$("${compose[@]}" ps -q api)"
+# Pull이 가변 태그를 새 이미지로 옮기기 전에 실행·정지 상태를 포함한 기존 이미지를 보존한다.
+previous_container="$("${compose[@]}" ps --all --quiet api)"
 previous_image_id=""
 if [[ -n "$previous_container" ]]; then
   previous_image_id="$(docker inspect --format '{{.Image}}' "$previous_container")"
+else
+  # 컨테이너가 삭제됐어도 로컬에 기존 이미지가 남아 있으면 롤백 대상으로 사용한다.
+  previous_image_id="$(docker image inspect --format '{{.Id}}' "$api_image" 2>/dev/null || true)"
 fi
 
 log "새 API 이미지를 확인합니다: $api_image"
