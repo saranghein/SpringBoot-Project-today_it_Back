@@ -1,0 +1,17 @@
+[Unit]
+Description=TodayIt development API image deployment
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=docker
+Environment=HOME=/home/ubuntu
+Environment=TODAYIT_APP_DIR=/opt/todayit
+ExecStart=/opt/todayit/bin/deploy-images.sh
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

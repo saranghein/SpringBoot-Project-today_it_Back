@@ -1,0 +1,12 @@
+[Unit]
+Description=Check GHCR for a new TodayIt development API image
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+RandomizedDelaySec=15s
+Persistent=true
+Unit=todayit-image-deploy.service
+
+[Install]
+WantedBy=timers.target

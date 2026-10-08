@@ -19,3 +19,6 @@ out/
 target/
 .gradle/
 
+# Terraform 로컬 캐시, 상태와 실행 계획
+infra/
+

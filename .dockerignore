@@ -1,0 +1,13 @@
+.git
+.github
+.gradle
+.idea
+**/build
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/.env
+**/.env.*
+!**/.env.example
+deploy/compose/data
+

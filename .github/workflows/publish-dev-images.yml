@@ -1,0 +1,105 @@
+name: 개발 컨테이너 이미지 게시
+
+on:
+  push:
+    branches:
+      - develop
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-dev-images
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: 배포 전 전체 검사
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 저장소 Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Java 21 설정
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Gradle 설정
+        uses: gradle/actions/setup-gradle@07d1f8453baaff67fb503883367f8b13e6158a54 # v6
+
+      - name: Gradle Wrapper 실행 권한 설정
+        run: chmod +x gradlew
+
+      - name: 전체 검사
+        run: ./gradlew check --no-daemon
+
+  publish:
+    name: ${{ matrix.name }} 이미지 게시
+    needs: verify
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: API
+            image: todayit-api
+            dockerfile: deploy/docker/api.Dockerfile
+            cache_scope: api
+          - name: Data Worker
+            image: todayit-data-worker
+            dockerfile: deploy/docker/data-worker.Dockerfile
+            cache_scope: data-worker
+
+    steps:
+      - name: 저장소 Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: 이미지 주소 구성
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=ghcr.io/${owner}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+
+      - name: GHCR 로그인
+        shell: bash
+        run: |
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" |
+            docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: 이미지 빌드 및 게시
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform linux/amd64 \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "${IMAGE_NAME}:${GITHUB_SHA}" \
+            --tag "${IMAGE_NAME}:dev" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --cache-from "type=gha,scope=${{ matrix.cache_scope }}" \
+            --cache-to "type=gha,mode=max,scope=${{ matrix.cache_scope }}" \
+            --push \
+            .
