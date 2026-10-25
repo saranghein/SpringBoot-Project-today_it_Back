@@ -136,6 +136,10 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/actuator/health/liveness")
                     .permitAll()
 
+                    // 배포 Nginx에서 Actuator 경로를 차단하고 내부 Prometheus에서만 수집한다.
+                    .requestMatchers(HttpMethod.GET, "/actuator/prometheus")
+                    .permitAll()
+
                     // API 명세
                     .requestMatchers(
                         HttpMethod.GET,

@@ -52,7 +52,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 // Spring Security 접근 정책, 인증 인가 실패 응답 테스트
 @ActiveProfiles("test")
-@SpringBootTest(properties = "todayit.security.cors.origins[0]=https://frontend.test")
+@SpringBootTest(
+    properties = {
+      "todayit.security.cors.origins[0]=https://frontend.test",
+      "management.endpoints.web.exposure.include=health,prometheus"
+    })
 @AutoConfigureMockMvc
 @Import({
   SecurityConfigTest.SecurityTestController.class,
@@ -192,6 +196,23 @@ public class SecurityConfigTest {
 
     // Then
     result.andExpect(status().isOk());
+  }
+
+  @Test
+  @DisplayName("Prometheus는 인증 없이 실제 JVM 메트릭을 수집할 수 있다")
+  void allowsAnonymousPrometheusScrape() throws Exception {
+    mockMvc
+        .perform(get("/actuator/prometheus"))
+        .andExpect(status().isOk())
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                .string(org.hamcrest.Matchers.containsString("jvm_memory_used_bytes")));
+  }
+
+  @Test
+  @DisplayName("Prometheus 수집 허용이 다른 Actuator 엔드포인트를 공개하지 않는다")
+  void rejectsAnonymousAccessToOtherActuatorEndpoints() throws Exception {
+    mockMvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());
   }
 
   @Test

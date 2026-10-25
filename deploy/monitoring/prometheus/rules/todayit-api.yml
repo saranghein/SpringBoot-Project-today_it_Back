@@ -1,0 +1,47 @@
+# Prometheus 조회창에서 record 이름을 입력하면 한국어 설명과 함께 조회할 수 있습니다.
+groups:
+  - name: Todayit API 주요 지표
+    rules:
+      - record: todayit:api_scrape_status
+        expr: up{job="todayit-api"}
+        labels:
+          display_name: API 수집 상태
+          description: "1은 정상 수집, 0은 수집 실패"
+          unit: 상태
+
+      - record: todayit:http_requests:rate5m
+        expr: sum(rate(http_server_requests_seconds_count{job="todayit-api"}[5m]))
+        labels:
+          display_name: 초당 HTTP 요청 수
+          description: 최근 5분 기준 초당 평균 요청 수
+          unit: 건/초
+
+      - record: todayit:http_server_errors:rate5m
+        expr: sum(rate(http_server_requests_seconds_count{job="todayit-api",status=~"5.."}[5m]))
+        labels:
+          display_name: 초당 서버 오류 수
+          description: 최근 5분 기준 초당 평균 HTTP 5xx 수, 오류가 없으면 결과가 없을 수 있음
+          unit: 건/초
+
+      - record: todayit:http_response_time_ms:mean5m
+        expr: >-
+          1000 * sum(rate(http_server_requests_seconds_sum{job="todayit-api"}[5m]))
+          / clamp_min(sum(rate(http_server_requests_seconds_count{job="todayit-api"}[5m])), 0.000001)
+        labels:
+          display_name: 평균 HTTP 응답 시간
+          description: 최근 5분 요청 한 건의 평균 소요 시간, 요청이 없으면 0일 수 있음
+          unit: 밀리초
+
+      - record: todayit:jvm_heap_used_bytes
+        expr: sum(jvm_memory_used_bytes{job="todayit-api",area="heap"})
+        labels:
+          display_name: JVM 힙 메모리 사용량
+          description: 애플리케이션이 사용하는 힙 메모리
+          unit: 바이트
+
+      - record: todayit:process_cpu_percent
+        expr: 100 * process_cpu_usage{job="todayit-api"}
+        labels:
+          display_name: 프로세스 CPU 사용률
+          description: 애플리케이션 프로세스의 CPU 사용률
+          unit: 퍼센트

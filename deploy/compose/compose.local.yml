@@ -1,4 +1,8 @@
 services:
+  nginx:
+    volumes:
+      - ../nginx/bootstrap.conf.template:/etc/nginx/templates/default.conf.template:ro
+
   api:
     image: todayit-api:local
     build:
