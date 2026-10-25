@@ -8,4 +8,8 @@ dependencies {
     implementation project(':domains:recommendation')
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     implementation 'org.springframework.security:spring-security-oauth2-jose'
+
+    implementation 'org.springframework.boot:spring-boot-starter-jackson'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
