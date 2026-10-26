@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  main:
+    web-application-type: none
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: never
+
+todayit:
+  place:
+    sources:
+      tourapi:
+        enabled: ${TOUR_API_ENABLED:false}
+        service-key: ${TOUR_API_SERVICE_KEY}
+        mobile-app: ${TOUR_API_MOBILE_APP:TodayIt}
+        timeout: ${TOUR_API_TIMEOUT:30s}
+      redtable:
+        enabled: ${REDTABLE_ENABLED:false}
+        service-key: ${REDTABLE_SERVICE_KEY}
+        timeout: ${REDTABLE_TIMEOUT:30s}
+      culture:
+        enabled: ${CULTURE_ENABLED:false}
+        service-key: ${CULTURE_SERVICE_KEY}
+        timeout: ${CULTURE_TIMEOUT:30s}

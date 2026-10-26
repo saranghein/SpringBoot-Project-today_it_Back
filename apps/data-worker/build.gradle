@@ -12,6 +12,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.springframework.boot:spring-boot-starter-jackson'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
     runtimeOnly 'org.postgresql:postgresql'
@@ -21,4 +23,36 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-batch-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testRuntimeOnly 'com.h2database:h2'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+}
+
+tasks.named('processTestResources') {
+    from(rootProject.file('apps/api/src/main/resources/db/migration/V13__create_external_place_raw.sql')) {
+        into 'raw-migration'
+    }
+    from(rootProject.file('apps/api/src/main/resources/db/migration')) {
+        into 'place-service-migration'
+    }
+}
+
+tasks.named('test') {
+    exclude '**/PlaceSourceSmokeTest.class'
+}
+
+tasks.register('placeSourceSmokeTest', Test) {
+    description = 'Explicitly verify enabled external place sources with real credentials, without a database'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/PlaceSourceSmokeTest.class'
+    systemProperty 'spring.config.import', 'optional:' + rootProject.file('deploy/compose/.env').toURI().toString() + '[.properties]'
+    useJUnitPlatform()
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
 }
