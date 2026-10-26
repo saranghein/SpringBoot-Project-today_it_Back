@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.todayit.dataworker.DataWorkerApplication;
 import com.todayit.place.client.external.PlaceSourceException.Reason;
+import com.todayit.place.ingestion.service.DatabasePlaceRegionQueryService;
 import com.todayit.place.ingestion.service.PlaceIngestionService;
 import com.todayit.place.ingestion.service.PlaceRegionQueryService;
 import com.todayit.place.ingestion.service.PlaceUpsertCommandService;
@@ -314,6 +315,46 @@ class PostgresPlaceSourceRepositoryTest {
         .isInstanceOf(IllegalTransactionStateException.class);
 
     assertThat(count("place")).isZero();
+  }
+
+  /** PostgreSQL의 실제 지역 조회와 소개 정제를 거쳐 저장하고 미등록 지역은 보류하는지 확인합니다. */
+  @Test
+  void ingestsWithDatabaseRegionLookupAndPreservesNormalizedDescription() {
+    var lookup = new DatabasePlaceRegionQueryService(jdbc);
+    when(regions.findRegionId("11", "110")).thenAnswer(call -> lookup.findRegionId("11", "110"));
+    when(regions.findRegionId("11", "140")).thenAnswer(call -> lookup.findRegionId("11", "140"));
+    successfulRaw("001", "VE030100", "110");
+    successfulRaw("002", "VE030100", "140");
+    jdbc.update(
+        "UPDATE external_place_raw SET payload = jsonb_set(payload, '{common,0,overview}', to_jsonb(CAST(? AS text))) WHERE source_id = ?",
+        "<p>장소 소개 &amp; 안내</p>",
+        "001");
+
+    var result = ingestionService.ingestTourApi(10);
+
+    assertThat(result).isEqualTo(new PlaceIngestionResult(2, 1, 0, 0, 1, 0));
+    assertThat(jdbc.queryForObject("SELECT description FROM place", String.class))
+        .isEqualTo("장소 소개 & 안내");
+    assertThat(count("region_place")).isEqualTo(1);
+  }
+
+  /** 유일 제약을 미룬 지역에 중복이 있으면 장소를 저장하지 않고 다음 정상 지역을 처리하는지 확인합니다. */
+  @Test
+  void duplicateDatabaseRegionFailsOnePlaceAndContinuesWithNextRegion() {
+    jdbc.update(
+        "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES ('11', '110', '서울특별시', '종로구'), ('11', '140', '서울특별시', '중구')");
+    var lookup = new DatabasePlaceRegionQueryService(jdbc);
+    when(regions.findRegionId("11", "110")).thenAnswer(call -> lookup.findRegionId("11", "110"));
+    when(regions.findRegionId("11", "140")).thenAnswer(call -> lookup.findRegionId("11", "140"));
+    successfulRaw("001", "VE030100", "110");
+    successfulRaw("002", "VE030100", "140");
+
+    var result = ingestionService.ingestTourApi(10);
+
+    assertThat(result).isEqualTo(new PlaceIngestionResult(2, 1, 0, 0, 0, 1));
+    assertThat(jdbc.queryForList("SELECT source_id FROM place_source", String.class))
+        .containsExactly("002");
+    assertThat(count("place")).isEqualTo(1);
   }
 
   /**

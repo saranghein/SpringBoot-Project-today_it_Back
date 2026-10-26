@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import tools.jackson.databind.JsonNode;
 
-/** TourAPI KorService2의 지역 목록과 contentid별 상세 원본을 조회합니다. */
+/** TourAPI KorService2의 지역 기반 장소 목록과 contentid별 상세 원본을 조회합니다. 지역 코드 목록은 수집하지 않습니다. */
 public final class TourApiPlaceDataSource implements PlaceDataSource {
 
   private static final Set<String> LIST_FILTERS =

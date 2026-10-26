@@ -114,14 +114,13 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
   private int insertPlace(NormalizedPlace place) {
     return ((Number)
             bindPlace(
-                entityManager
-                .createNativeQuery(
-                    """
+                    entityManager.createNativeQuery(
+                        """
         INSERT INTO place (name, latitude, longitude, address, category, description, is_active, is_deleted)
         VALUES (:name, :latitude, :longitude, :address, :category, :description, true, false)
         RETURNING place_id
         """),
-                place)
+                    place)
                 .getSingleResult())
         .intValue();
   }
@@ -136,9 +135,8 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
   private void updatePlace(int placeId, NormalizedPlace place) {
     int changed =
         bindPlace(
-                entityManager
-            .createNativeQuery(
-                """
+                entityManager.createNativeQuery(
+                    """
         UPDATE place
         SET name = :name, latitude = :latitude, longitude = :longitude,
             address = :address, category = :category,
