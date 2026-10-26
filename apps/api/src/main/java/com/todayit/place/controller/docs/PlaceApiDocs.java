@@ -96,9 +96,8 @@ public interface PlaceApiDocs {
    * 장소 목록을 페이지 단위로 조회합니다.
    *
    * @param authentication 선택 인증 정보
-   * @param si 시·도 코드 2자리, 생략 가능
-   * @param gun 시·군 코드 3자리, 생략 가능
-   * @param gu 구 코드 3자리, 생략 가능
+   * @param sidoCode 시·도 코드 2자리, 생략 가능
+   * @param sigunguCode 시·군·구 코드 3자리, 생략 가능
    * @param categories 장소 카테고리 목록
    * @param page 페이지 번호
    * @param size 페이지 크기
@@ -108,7 +107,7 @@ public interface PlaceApiDocs {
   @Operation(
       summary = "장소 필터 조회",
       description =
-          "지역·카테고리로 활성 장소를 페이지 단위로 조회합니다. si·gun·gu 코드는 각각 선택사항이며, 전달된 조건을 모두 만족하는 지역의 장소를 조회합니다. 인증은 선택사항이며, 비회원의 liked는 false입니다.",
+          "지역·카테고리로 활성 장소를 페이지 단위로 조회합니다. sidoCode·sigunguCode 코드는 각각 선택사항이며, 전달된 조건을 모두 만족하는 지역의 장소를 조회합니다. 인증은 선택사항이며, 비회원의 liked는 false입니다.",
       security = {@SecurityRequirement(), @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)})
   @ApiResponses({
     @ApiResponse(
@@ -155,9 +154,8 @@ public interface PlaceApiDocs {
                             "{\"success\":false,\"code\":\"INTERNAL_SERVER_ERROR\",\"message\":\"서버 내부 오류가 발생했습니다.\"}")))
   })
   ResponseEntity<CommonResponse<PageResponse<PlaceFilterResponse>>> findPlaces(
-      @Parameter(description = "시·도 코드 2자리입니다. 생략 가능합니다.", example = "41") String si,
-      @Parameter(description = "시·군 코드 3자리입니다. 생략 가능합니다.", example = "110") String gun,
-      @Parameter(description = "구 코드 3자리입니다. 생략 가능합니다.", example = "111") String gu,
+      @Parameter(description = "시·도 코드 2자리입니다. 생략 가능합니다.", example = "41") String sidoCode,
+      @Parameter(description = "시·군·구 코드 3자리입니다. 생략 가능합니다.", example = "110") String sigunguCode,
       @Parameter(
               description =
                   "카테고리를 복수 선택할 수 있습니다. 쉼표로 구분하며, 선택한 값 중 하나에 해당하는 장소를 조회합니다. 생략하면 전체 카테고리를 조회합니다.",

@@ -92,12 +92,11 @@ FROM (
         ('도심 미술관', '140'),
         ('운영 중단 장소', '110'),
         ('삭제된 장소', '110')
-) AS seed(place_name, gu)
+) AS seed(place_name, sigungu_code)
 JOIN place ON place.name = seed.place_name
 JOIN region
-  ON region.si = '11'
- AND region.gun = '000'
- AND region.gu = seed.gu
+  ON region.sido_code = '11'
+ AND region.sigungu_code = seed.sigungu_code
 WHERE NOT EXISTS (
     SELECT 1
     FROM region_place
@@ -135,7 +134,7 @@ SELECT
     TRUE,
     FALSE
 FROM (
-    SELECT region_id, si || ' ' || gun || ' ' || gu AS region_name
+    SELECT region_id, sido_name || ' ' || sigungu_name AS region_name
     FROM region
 ) AS seed
 WHERE NOT EXISTS (
@@ -168,7 +167,7 @@ SELECT
     region.region_id,
     place.place_id
 FROM region
-JOIN place ON place.name = region.si || ' ' || region.gun || ' ' || region.gu || ' 대표 장소'
+JOIN place ON place.name = region.sido_name || ' ' || region.sigungu_name || ' 대표 장소'
 WHERE NOT EXISTS (
     SELECT 1
     FROM region_place
