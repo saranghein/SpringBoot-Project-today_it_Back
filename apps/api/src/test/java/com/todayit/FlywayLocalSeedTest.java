@@ -59,7 +59,7 @@ class FlywayLocalSeedTest {
   @DisplayName("전국 지역 생성 후 모든 더미 장소를 지역에 연결한다")
   void seedsNationwideRegionsAndConnectsEveryDummyPlace() {
     // Given
-    int expectedRegionCount = 256;
+    int expectedRegionCount = 269;
 
     // When
     Integer regionCount =
@@ -79,10 +79,15 @@ class FlywayLocalSeedTest {
     // Then
     assertThat(regionCount).isEqualTo(expectedRegionCount);
     assertThat(placeCount).isPositive();
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT sigungu_name FROM todayit.region WHERE sido_code = '41' AND sigungu_code = '115'",
+                String.class))
+        .isEqualTo("수원시 팔달구");
     assertThat(unmappedPlaceCount).isZero();
-    assertThat(hasRegion("11", "000", "110")).isTrue();
-    assertThat(hasRegion("41", "110", "115")).isTrue();
-    assertThat(hasRegion("36", "110", "000")).isTrue();
+    assertThat(hasRegion("11", "110")).isTrue();
+    assertThat(hasRegion("41", "115")).isTrue();
+    assertThat(hasRegion("36", "110")).isTrue();
   }
 
   @Test
@@ -103,14 +108,13 @@ class FlywayLocalSeedTest {
     assertThat(coursePlaceCount).isEqualTo(expectedCoursePlaceCount);
   }
 
-  private boolean hasRegion(String si, String gun, String gu) {
+  private boolean hasRegion(String sidoCode, String sigunguCode) {
     Integer count =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM \"todayit\".region WHERE si = ? AND gun = ? AND gu = ?",
+            "SELECT COUNT(*) FROM \"todayit\".region WHERE sido_code = ? AND sigungu_code = ?",
             Integer.class,
-            si,
-            gun,
-            gu);
+            sidoCode,
+            sigunguCode);
     return count != null && count > 0;
   }
 }

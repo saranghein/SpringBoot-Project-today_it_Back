@@ -63,73 +63,43 @@ class PlaceRepositoryTest {
   @Test
   @DisplayName("시도 코드만으로 조회한다")
   @Transactional
-  void findsRegionsBySiOnly() {
+  void findsRegionsBySidoOnly() {
     // Given
     jdbcTemplate.update(
-        "INSERT INTO region (si, gun, gu) VALUES ('41', '110', '111'), ('41', '110', '113'), ('26', '110', '111')");
+        "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES ('41', '111', '경기도', '수원시 장안구'), ('41', '113', '경기도', '수원시 권선구'), ('30', '110', '대전광역시', '동구')");
 
     // When
-    List<Integer> regionIds = regionRepository.findIdsByCodes("41", null, null);
+    List<Integer> regionIds = regionRepository.findIdsByCodes("41", null);
 
     // Then
     assertThat(regionIds).hasSize(2);
   }
 
   @Test
-  @DisplayName("시군 코드만으로 조회한다")
+  @DisplayName("시군구 코드만으로 조회한다")
   @Transactional
-  void findsRegionsByGunOnly() {
+  void findsRegionsBySigunguOnly() {
     // Given
     jdbcTemplate.update(
-        "INSERT INTO region (si, gun, gu) VALUES ('41', '110', '111'), ('41', '110', '113'), ('26', '110', '111')");
+        "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES ('41', '111', '경기도', '수원시 장안구'), ('41', '113', '경기도', '수원시 권선구'), ('30', '110', '대전광역시', '동구')");
 
     // When
-    List<Integer> regionIds = regionRepository.findIdsByCodes(null, "110", null);
+    List<Integer> regionIds = regionRepository.findIdsByCodes(null, "111");
 
     // Then
-    assertThat(regionIds).hasSize(3);
+    assertThat(regionIds).hasSize(1);
   }
 
   @Test
-  @DisplayName("구 코드만으로 조회한다")
-  @Transactional
-  void findsRegionsByGuOnly() {
-    // Given
-    jdbcTemplate.update(
-        "INSERT INTO region (si, gun, gu) VALUES ('41', '110', '111'), ('41', '110', '113'), ('26', '110', '111')");
-
-    // When
-    List<Integer> regionIds = regionRepository.findIdsByCodes(null, null, "111");
-
-    // Then
-    assertThat(regionIds).hasSize(2);
-  }
-
-  @Test
-  @DisplayName("시도와 시군 코드를 함께 적용한다")
-  @Transactional
-  void findsRegionsBySiAndGun() {
-    // Given
-    jdbcTemplate.update(
-        "INSERT INTO region (si, gun, gu) VALUES ('41', '110', '111'), ('41', '110', '113'), ('26', '110', '111')");
-
-    // When
-    List<Integer> regionIds = regionRepository.findIdsByCodes("41", "110", null);
-
-    // Then
-    assertThat(regionIds).hasSize(2);
-  }
-
-  @Test
-  @DisplayName("지역 코드 세 조건을 모두 적용한다")
+  @DisplayName("지역 코드 두 조건을 모두 적용한다")
   @Transactional
   void findsRegionsByAllCodes() {
     // Given
     jdbcTemplate.update(
-        "INSERT INTO region (si, gun, gu) VALUES ('41', '110', '111'), ('41', '110', '113'), ('26', '110', '111')");
+        "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES ('41', '111', '경기도', '수원시 장안구'), ('41', '113', '경기도', '수원시 권선구'), ('30', '110', '대전광역시', '동구')");
 
     // When
-    List<Integer> regionIds = regionRepository.findIdsByCodes("41", "110", "111");
+    List<Integer> regionIds = regionRepository.findIdsByCodes("41", "111");
 
     // Then
     assertThat(regionIds).hasSize(1);
@@ -141,10 +111,10 @@ class PlaceRepositoryTest {
   void findsRegionsByMismatchedCodes() {
     // Given
     jdbcTemplate.update(
-        "INSERT INTO region (si, gun, gu) VALUES ('41', '110', '111'), ('41', '110', '113'), ('26', '110', '111')");
+        "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES ('41', '111', '경기도', '수원시 장안구'), ('41', '113', '경기도', '수원시 권선구'), ('30', '110', '대전광역시', '동구')");
 
     // When
-    List<Integer> regionIds = regionRepository.findIdsByCodes("11", "110", "111");
+    List<Integer> regionIds = regionRepository.findIdsByCodes("11", "111");
 
     // Then
     assertThat(regionIds).hasSize(0);
@@ -172,19 +142,19 @@ class PlaceRepositoryTest {
     // Then
     assertThat(
             jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM region WHERE si ~ '^[0-9]{2}$' AND gun ~ '^[0-9]{3}$' AND gu ~ '^[0-9]{3}$'",
+                "SELECT COUNT(*) FROM region WHERE sido_code ~ '^[0-9]{2}$' AND sigungu_code ~ '^[0-9]{3}$'",
                 Integer.class))
-        .isEqualTo(256);
-    assertThat(
-            jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM place WHERE name LIKE '% 대표 장소'", Integer.class))
-        .isEqualTo(256);
-    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM region_place", Integer.class))
         .isEqualTo(269);
     assertThat(
             jdbcTemplate.queryForObject(
-                "SELECT address FROM place WHERE name = '41 110 111 대표 장소'", String.class))
-        .isEqualTo("41 110 111 중앙로 1");
+                "SELECT COUNT(*) FROM place WHERE name LIKE '% 대표 장소'", Integer.class))
+        .isEqualTo(269);
+    assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM region_place", Integer.class))
+        .isEqualTo(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM place", Integer.class));
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT address FROM place WHERE name = '경기도 수원시 장안구 대표 장소'", String.class))
+        .isEqualTo("경기도 수원시 장안구 중앙로 1");
   }
 
   @BeforeEach
@@ -230,7 +200,7 @@ class PlaceRepositoryTest {
     // Given
     Integer regionId =
         jdbcTemplate.queryForObject(
-            "INSERT INTO region (si, gun, gu) VALUES ('서울특별시', '해당 없음', '종로구') RETURNING region_id",
+            "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES ('11', '110', '서울특별시', '종로구') RETURNING region_id",
             Integer.class);
     Integer restaurantId = insertPlace("식당", "RESTAURANT");
     Integer cafeId = insertPlace("카페", "CAFE_DESSERT");
@@ -260,9 +230,9 @@ class PlaceRepositoryTest {
   @Transactional
   void findsPlacesInAllDistrictsOfSelectedCity() {
     // Given
-    Integer jongnoRegionId = insertRegion("서울특별시", "해당 없음", "종로구");
-    Integer mapoRegionId = insertRegion("서울특별시", "해당 없음", "마포구");
-    Integer suwonRegionId = insertRegion("경기도", "수원시", "팔달구");
+    Integer jongnoRegionId = insertRegion("11", "110", "서울특별시", "종로구");
+    Integer mapoRegionId = insertRegion("11", "440", "서울특별시", "마포구");
+    Integer suwonRegionId = insertRegion("41", "115", "경기도", "수원시 팔달구");
     Integer jongnoPlaceId = insertPlace("종로 장소", "RESTAURANT");
     Integer mapoPlaceId = insertPlace("마포 장소", "CAFE_DESSERT");
     Integer suwonPlaceId = insertPlace("수원 장소", "RESTAURANT");
@@ -296,13 +266,15 @@ class PlaceRepositoryTest {
         .containsExactly("종로 장소");
   }
 
-  private Integer insertRegion(String si, String gun, String gu) {
+  private Integer insertRegion(
+      String sidoCode, String sigunguCode, String sidoName, String sigunguName) {
     return jdbcTemplate.queryForObject(
-        "INSERT INTO region (si, gun, gu) VALUES (?, ?, ?) RETURNING region_id",
+        "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES (?, ?, ?, ?) RETURNING region_id",
         Integer.class,
-        si,
-        gun,
-        gu);
+        sidoCode,
+        sigunguCode,
+        sidoName,
+        sigunguName);
   }
 
   private Integer insertPlace(String name, String category) {

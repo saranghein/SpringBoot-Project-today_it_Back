@@ -27,8 +27,6 @@ CREATE TABLE agreement (
                            is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
                            CONSTRAINT uk_agreement_code_version UNIQUE (code, version)
 );
-
--- 활성 약관은 코드별 하나만 허용
 CREATE UNIQUE INDEX uk_agreement_active_code
     ON agreement (code)
     WHERE is_deleted = FALSE;
@@ -55,13 +53,9 @@ CREATE TABLE member (
                                 OR (provider <> 'LOCAL' AND password IS NULL)
                             )
 );
-
--- 영문 대소문자와 앞뒤 공백을 제외한 이메일 중복 방지
 CREATE UNIQUE INDEX uk_member_email_provider_normalized
     ON member (LOWER(BTRIM(email)), provider)
     WHERE email IS NOT NULL;
-
--- 영문 대소문자와 앞뒤 공백을 제외한 닉네임 중복 방지
 CREATE UNIQUE INDEX uk_member_nickname_normalized
     ON member (LOWER(BTRIM(nickname)));
 

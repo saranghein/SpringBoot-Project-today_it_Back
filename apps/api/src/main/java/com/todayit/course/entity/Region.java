@@ -17,14 +17,17 @@ public class Region {
   @Column(name = "region_id", nullable = false)
   private int regionId;
 
-  @Column(name = "si", nullable = false, length = 20)
-  private String si;
+  @Column(name = "sido_code", nullable = false, length = 5)
+  private String sidoCode;
 
-  @Column(name = "gun", nullable = false, length = 20)
-  private String gun;
+  @Column(name = "sigungu_code", nullable = false, length = 5)
+  private String sigunguCode;
 
-  @Column(name = "gu", nullable = false, length = 30)
-  private String gu;
+  @Column(name = "sido_name", nullable = false, length = 10)
+  private String sidoName;
+
+  @Column(name = "sigungu_name", nullable = false, length = 10)
+  private String sigunguName;
 
   protected Region() {}
 }

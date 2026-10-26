@@ -104,7 +104,7 @@ class PlaceQueryServiceTest {
             regionPlaceQueryService);
 
     PageResult<PlaceResult> result =
-        service.findPlaces(null, null, null, null, 0, 20, PlaceSort.LATEST, "member-1");
+        service.findPlaces(null, null, null, 0, 20, PlaceSort.LATEST, "member-1");
 
     assertThat(result.content()).extracting(PlaceResult::liked).containsExactly(true, false);
     verify(placeMemberLikeRepository).findLikedPlaceIds("member-1", List.of(1, 2));
@@ -124,10 +124,7 @@ class PlaceQueryServiceTest {
             placeScrapRepository,
             regionPlaceQueryService);
 
-    assertThat(
-            service
-                .findPlaces(null, null, null, null, 0, 20, PlaceSort.LATEST, "member-1")
-                .content())
+    assertThat(service.findPlaces(null, null, null, 0, 20, PlaceSort.LATEST, "member-1").content())
         .isEmpty();
     org.mockito.Mockito.verifyNoInteractions(placeMemberLikeRepository, regionPlaceQueryService);
   }
@@ -161,7 +158,7 @@ class PlaceQueryServiceTest {
 
     // When
     PageResult<PlaceResult> result =
-        placeQueryService.findPlaces(null, null, null, List.of(), 1, 2, PlaceSort.POPULAR, null);
+        placeQueryService.findPlaces(null, null, List.of(), 1, 2, PlaceSort.POPULAR, null);
 
     // Then
     assertThat(result.content())
@@ -195,7 +192,7 @@ class PlaceQueryServiceTest {
   void findsPlacesWithFilters() {
     // Given
     PageRequest pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
-    when(regionPlaceQueryService.findRegionIds("11", null, "230")).thenReturn(List.of(10));
+    when(regionPlaceQueryService.findRegionIds("11", "230")).thenReturn(List.of(10));
     when(placeRepository.findPlaces(
             List.of(10), true, List.of(Category.RESTAURANT, Category.CAFE_DESSERT), true, pageable))
         .thenReturn(Page.empty(pageable));
@@ -211,7 +208,6 @@ class PlaceQueryServiceTest {
     PageResult<PlaceResult> result =
         placeQueryService.findPlaces(
             "11",
-            null,
             "230",
             List.of(Category.RESTAURANT, Category.CAFE_DESSERT),
             0,
