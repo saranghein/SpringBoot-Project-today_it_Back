@@ -126,6 +126,7 @@ services:
       CULTURE_TIMEOUT: ${CULTURE_TIMEOUT:-30s}
       JAVA_TOOL_OPTIONS: -Xms128m -Xmx320m
     networks:
+      - worker-egress
       - backend
     depends_on:
       postgres:
@@ -206,5 +207,6 @@ services:
 
 networks:
   edge:
+  worker-egress:
   backend:
     internal: true
