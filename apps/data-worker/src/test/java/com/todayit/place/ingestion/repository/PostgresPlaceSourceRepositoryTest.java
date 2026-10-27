@@ -107,9 +107,9 @@ class PostgresPlaceSourceRepositoryTest {
     when(regions.findRegionId("11", "110")).thenReturn(Optional.of(regionId));
   }
 
-  /** 신규 활성 장소와 원천·지역 연결을 생성하되 후보 이미지는 공개하지 않는지 검증합니다. */
+  /** 신규 활성 장소·원천·지역 연결과 정제된 원본 이미지 URL을 함께 저장하는지 검증합니다. */
   @Test
-  void createsActivePlaceAndSourceAndRegionButDoesNotPublishCandidateImages() {
+  void createsActivePlaceSourceRegionAndOriginalImageUrls() {
     var result = service.upsert(normalized("001", "공원", "소개"));
 
     assertThat(result.status()).isEqualTo(PlaceUpsertResult.Status.APPLIED);
@@ -120,7 +120,12 @@ class PostgresPlaceSourceRepositoryTest {
     assertThat(row.get("description")).isEqualTo("소개");
     assertThat(count("place_source")).isEqualTo(1);
     assertThat(count("region_place")).isEqualTo(1);
-    assertThat(count("place_image")).isZero();
+    assertThat(
+            jdbc.queryForList(
+                "SELECT image_url FROM place_image WHERE place_id = ?",
+                String.class,
+                result.placeId()))
+        .containsExactly("https://example.com/candidate.jpg");
     assertThat(count("external_place_raw")).isZero();
   }
 
@@ -133,6 +138,8 @@ class PostgresPlaceSourceRepositoryTest {
             "SELECT created_at FROM place WHERE place_id = ?",
             OffsetDateTime.class,
             first.placeId());
+    var originalImages =
+        jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", first.placeId());
 
     var second = service.upsert(normalized("001", "바뀐 이름", "소개 추가"));
 
@@ -140,6 +147,8 @@ class PostgresPlaceSourceRepositoryTest {
     assertThat(count("place")).isEqualTo(1);
     assertThat(count("place_source")).isEqualTo(1);
     assertThat(count("region_place")).isEqualTo(1);
+    assertThat(jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", first.placeId()))
+        .isEqualTo(originalImages);
     assertThat(
             jdbc.queryForObject(
                 "SELECT created_at FROM place WHERE place_id = ?",
@@ -179,7 +188,10 @@ class PostgresPlaceSourceRepositoryTest {
     assertThat(row.get("is_active")).isEqualTo(false);
     assertThat(row.get("is_deleted")).isEqualTo(true);
     assertThat(row.get("updated_at")).isNotNull();
-    assertThat(count("place_image")).isEqualTo(1);
+    assertThat(
+            jdbc.queryForList(
+                "SELECT image_url FROM place_image ORDER BY place_image_id", String.class))
+        .containsExactly("https://example.com/candidate.jpg", "https://example.com/manual.jpg");
     assertThat(count("place_member_like")).isEqualTo(1);
     assertThat(count("place_scrap")).isEqualTo(1);
   }
@@ -194,6 +206,7 @@ class PostgresPlaceSourceRepositoryTest {
 
     assertThat(count("place")).isZero();
     assertThat(count("place_source")).isZero();
+    assertThat(count("place_image")).isZero();
   }
 
   /** 지역 연결 실패 시 신규 장소와 원천 연결이 함께 롤백되는지 검증합니다. */
@@ -207,6 +220,7 @@ class PostgresPlaceSourceRepositoryTest {
     assertThat(count("place")).isZero();
     assertThat(count("place_source")).isZero();
     assertThat(count("region_place")).isZero();
+    assertThat(count("place_image")).isZero();
   }
 
   /** 새 지역 연결 실패 시 기존 장소의 필드 변경도 롤백되는지 검증합니다. */
@@ -247,6 +261,7 @@ class PostgresPlaceSourceRepositoryTest {
     assertThat(count("place")).isEqualTo(1);
     assertThat(count("place_source")).isEqualTo(1);
     assertThat(count("region_place")).isEqualTo(1);
+    assertThat(count("place_image")).isEqualTo(1);
   }
 
   /** 이름·좌표가 같아도 다른 원천 ID를 자동 병합하지 않는지 검증합니다. */
@@ -257,6 +272,180 @@ class PostgresPlaceSourceRepositoryTest {
 
     assertThat(second).isNotEqualTo(first);
     assertThat(count("place")).isEqualTo(2);
+    assertThat(count("place_image")).isEqualTo(2);
+  }
+
+  /** 원본 URL만 저장하고 반복 후보·재실행은 중복 추가하지 않으며 새 URL만 추가하는지 확인합니다. */
+  @Test
+  void appendsOnlyMissingOriginalUrlsAndKeepsExistingImageIdentityAndTimestamps() {
+    var a =
+        new Image(
+            "https://example.com/a.jpg",
+            "https://example.com/a-small.jpg",
+            "원천 이미지명",
+            "001",
+            "Type1");
+    int placeId = service.upsert(withImages(normalized("001", "공원", null), a, a)).placeId();
+    var original = jdbc.queryForMap("SELECT * FROM place_image WHERE place_id = ?", placeId);
+    var b = image("https://example.com/b.jpg");
+
+    service.upsert(withImages(normalized("001", "공원", null), a, b, b));
+    service.upsert(withImages(normalized("001", "공원", null), b, a));
+
+    assertThat(
+            jdbc.queryForList(
+                "SELECT image_url FROM place_image WHERE place_id = ? ORDER BY place_image_id",
+                String.class,
+                placeId))
+        .containsExactly(a.url(), b.url());
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT * FROM place_image WHERE place_image_id = ?",
+                original.get("place_image_id")))
+        .isEqualTo(original);
+  }
+
+  /** 원천에서 이미지가 사라져도 운영자 이미지와 과거 원천 이미지 행을 삭제하지 않는지 확인합니다. */
+  @Test
+  void emptyImageListPreservesAllExistingImages() {
+    int placeId = service.upsert(normalized("001", "공원", null)).placeId();
+    jdbc.update(
+        "INSERT INTO place_image (place_id, image_url) VALUES (?, 'https://example.com/manual.jpg')",
+        placeId);
+    var before =
+        jdbc.queryForList(
+            "SELECT * FROM place_image WHERE place_id = ? ORDER BY place_image_id", placeId);
+
+    service.upsert(withImages(normalized("001", "변경 이름", null)));
+
+    assertThat(
+            jdbc.queryForList(
+                "SELECT * FROM place_image WHERE place_id = ? ORDER BY place_image_id", placeId))
+        .isEqualTo(before);
+  }
+
+  /** 기존 수동 이미지와 같은 URL은 새 행으로 복제하지 않고 갱신하지도 않는지 확인합니다. */
+  @Test
+  void existingManualUrlIsReusedWithoutChangingImageRow() {
+    int placeId = service.upsert(withImages(normalized("001", "공원", null))).placeId();
+    jdbc.update(
+        "INSERT INTO place_image (place_id, image_url) VALUES (?, 'https://example.com/manual.jpg')",
+        placeId);
+    var before = jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", placeId);
+
+    service.upsert(
+        withImages(normalized("001", "공원", null), image("https://example.com/manual.jpg")));
+
+    assertThat(jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", placeId))
+        .isEqualTo(before);
+  }
+
+  /** 이미지 추가 중 DB 제약 실패가 나면 새 장소·원천·지역과 앞서 추가한 이미지도 함께 롤백되는지 확인합니다. */
+  @Test
+  void imageFailureRollsBackNewPlaceAndAllItsLinksAndImages() {
+    var invalid = image("https://example.com/" + "a".repeat(2048));
+
+    assertThatThrownBy(
+            () ->
+                service.upsert(
+                    withImages(
+                        normalized("001", "공원", null),
+                        image("https://example.com/valid.jpg"),
+                        invalid)))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+
+    assertThat(count("place")).isZero();
+    assertThat(count("place_source")).isZero();
+    assertThat(count("region_place")).isZero();
+    assertThat(count("place_image")).isZero();
+  }
+
+  /** 기존 장소 갱신 중 이미지 저장 실패가 나도 기존 기본정보·이미지는 그대로 남는지 확인합니다. */
+  @Test
+  void imageFailureRollsBackPlaceUpdateAndNewImagesButPreservesExistingImages() {
+    int placeId = service.upsert(normalized("001", "기존 이름", "기존 소개")).placeId();
+    var before = jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", placeId);
+
+    assertThatThrownBy(
+            () ->
+                service.upsert(
+                    withImages(
+                        normalized("001", "새 이름", "새 소개"),
+                        image("https://example.com/new.jpg"),
+                        image("https://example.com/" + "a".repeat(2048)))))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+
+    assertThat(jdbc.queryForMap("SELECT name, description FROM place WHERE place_id = ?", placeId))
+        .containsEntry("name", "기존 이름")
+        .containsEntry("description", "기존 소개");
+    assertThat(jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", placeId))
+        .isEqualTo(before);
+  }
+
+  /** 빈 이미지 목록은 신규 장소 저장을 막지 않는지 확인합니다. */
+  @Test
+  void createsPlaceWithoutAnyImages() {
+    var result = service.upsert(withImages(normalized("001", "공원", null)));
+
+    assertThat(result.status()).isEqualTo(PlaceUpsertResult.Status.APPLIED);
+    assertThat(count("place")).isEqualTo(1);
+    assertThat(count("place_image")).isZero();
+  }
+
+  /**
+   * 서로 다른 원천이 같은 장소를 갱신해도 장소 행 잠금으로 이미지 URL 중복을 방지하는지 확인합니다.
+   *
+   * @throws Exception 동시 실행에 실패할 때
+   */
+  @Test
+  void differentSourcesUpdatingSamePlaceConcurrentlyDoNotDuplicateImageUrls() throws Exception {
+    int placeId = service.upsert(withImages(normalized("001", "공원", null))).placeId();
+    jdbc.update(
+        "INSERT INTO place_source (place_id, provider, source_id) VALUES (?, 'TOUR_API', '002')",
+        placeId);
+    try (var executor = Executors.newFixedThreadPool(4)) {
+      var futures =
+          IntStream.range(0, 8)
+              .mapToObj(
+                  index ->
+                      executor.submit(
+                          () ->
+                              service.upsert(
+                                  withImages(
+                                      normalized(index % 2 == 0 ? "001" : "002", "공원", null),
+                                      image("https://example.com/shared.jpg")))))
+              .toList();
+      for (var future : futures) {
+        assertThat(future.get(30, TimeUnit.SECONDS).placeId()).isEqualTo(placeId);
+      }
+    }
+    assertThat(count("place")).isEqualTo(1);
+    assertThat(count("place_source")).isEqualTo(2);
+    assertThat(count("place_image")).isEqualTo(1);
+  }
+
+  /** 원본의 이미지가 정제·적재되고 이미지 메타데이터와 원본 상태는 보존되는지 확인합니다. */
+  @Test
+  void fullIngestionStoresOriginalImageUrlAndPreservesRawMetadataOnRerun() {
+    successfulRaw("001", "VE030100", "110");
+    String images =
+        """
+        [{"contentid":"001","originimgurl":"https://example.com/original.jpg","smallimageurl":"https://example.com/small.jpg",
+          "imgname":"원천 이미지","serialnum":"0001","cpyrhtDivCd":"Type1"}]
+        """;
+    jdbc.update(
+        "UPDATE external_place_raw SET payload = jsonb_set(payload, '{images}', CAST(? AS jsonb)) WHERE source_id = '001'",
+        images);
+    var before = jdbc.queryForList("SELECT * FROM external_place_raw");
+
+    var first = ingestionService.ingestAllTourApi(10);
+    var second = ingestionService.ingestAllTourApi(10);
+
+    assertThat(first).isEqualTo(new PlaceIngestionResult(1, 1, 0, 0, 0, 0));
+    assertThat(second).isEqualTo(first);
+    assertThat(jdbc.queryForList("SELECT image_url FROM place_image", String.class))
+        .containsExactly("https://example.com/original.jpg");
+    assertThat(jdbc.queryForList("SELECT * FROM external_place_raw")).isEqualTo(before);
   }
 
   /** Service 트랜잭션 없이 Repository를 직접 쓰는 호출을 거부하는지 검증합니다. */
@@ -313,8 +502,45 @@ class PostgresPlaceSourceRepositoryTest {
     assertThatThrownBy(
             () -> transaction.executeWithoutResult(status -> ingestionService.ingestTourApi(10)))
         .isInstanceOf(IllegalTransactionStateException.class);
+    assertThatThrownBy(
+            () -> transaction.executeWithoutResult(status -> ingestionService.ingestAllTourApi(10)))
+        .isInstanceOf(IllegalTransactionStateException.class);
 
     assertThat(count("place")).isZero();
+  }
+
+  /** 앞선 묶음이 모두 보류여도 10건 이후까지 처리하고 실패 롤백·원본 보존·재실행을 보장하는지 검증합니다. */
+  @Test
+  void fullIngestionTraversesBeyondFirstTenRowsWithoutChangingRawOrDuplicatingPlaces() {
+    for (int index = 1; index <= 25; index++) {
+      String category = index <= 12 ? "EX050800" : index == 13 ? "EV020200" : "VE030100";
+      String region = index == 14 ? "140" : index == 15 ? "150" : "110";
+      successfulRaw(Integer.toString(index), category, region);
+      if (index == 8) {
+        rawStore.saveFailure("TOUR_API", "failed", null, Reason.TRANSIENT);
+        rawStore.saveSuccess("CULTURE", "other", "{}", Instant.parse("2026-10-25T00:00:00Z"));
+      }
+    }
+    when(regions.findRegionId("11", "140")).thenReturn(Optional.empty());
+    when(regions.findRegionId("11", "150")).thenReturn(Optional.of(regionId + 100000));
+    var before =
+        jdbc.queryForList("SELECT * FROM external_place_raw ORDER BY external_place_raw_id");
+
+    var first = ingestionService.ingestAllTourApi(4);
+    var second = ingestionService.ingestAllTourApi(4);
+
+    assertThat(first).isEqualTo(new PlaceIngestionResult(25, 10, 1, 12, 1, 1));
+    assertThat(second).isEqualTo(first);
+    assertThat(count("place")).isEqualTo(10);
+    assertThat(count("place_source")).isEqualTo(10);
+    assertThat(count("region_place")).isEqualTo(10);
+    assertThat(
+            jdbc.queryForList(
+                "SELECT source_id FROM place_source ORDER BY source_id", String.class))
+        .containsExactlyElementsOf(
+            IntStream.rangeClosed(16, 25).mapToObj(Integer::toString).toList());
+    assertThat(jdbc.queryForList("SELECT * FROM external_place_raw ORDER BY external_place_raw_id"))
+        .isEqualTo(before);
   }
 
   /** PostgreSQL의 실제 지역 조회와 소개 정제를 거쳐 저장하고 미등록 지역은 보류하는지 확인합니다. */
@@ -380,7 +606,7 @@ class PostgresPlaceSourceRepositoryTest {
    * @param sourceId 공급원 장소 ID
    * @param name 정제할 장소명
    * @param description 정제된 일반 텍스트 소개
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 지정한 장소명과 소개를 포함하는 정상 정제 결과
    */
   private PlaceNormalizationResult normalized(String sourceId, String name, String description) {
     var place =
@@ -396,6 +622,41 @@ class PostgresPlaceSourceRepositoryTest {
             description,
             List.of(new Image("https://example.com/candidate.jpg", null, null, null, null)));
     return new PlaceNormalizationResult(1, sourceId, Status.NORMALIZED, null, place);
+  }
+
+  /**
+   * 저장 경계의 이미지 목록을 지정합니다. 실패 테스트는 정제 경계를 우회해 DB 오류를 유발합니다.
+   *
+   * @param result 정상 정제 결과
+   * @param images 저장할 원본 이미지
+   * @return 이미지 목록을 교체한 불변 결과
+   */
+  private PlaceNormalizationResult withImages(PlaceNormalizationResult result, Image... images) {
+    var place = result.place();
+    var changed =
+        new NormalizedPlace(
+            place.name(),
+            place.address(),
+            place.latitude(),
+            place.longitude(),
+            place.category(),
+            place.sidoCode(),
+            place.sigunguCode(),
+            place.sourceCategoryCode(),
+            place.description(),
+            List.of(images));
+    return new PlaceNormalizationResult(
+        result.rawId(), result.sourceId(), result.status(), result.reason(), changed);
+  }
+
+  /**
+   * URL 저장만 검증할 원천 이미지를 만듭니다.
+   *
+   * @param url 원본 이미지 URL
+   * @return 기타 메타데이터가 없는 이미지
+   */
+  private Image image(String url) {
+    return new Image(url, null, null, null, null);
   }
 
   /**

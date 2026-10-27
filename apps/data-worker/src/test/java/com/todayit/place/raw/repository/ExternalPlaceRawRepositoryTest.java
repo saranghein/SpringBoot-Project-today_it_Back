@@ -100,6 +100,32 @@ class ExternalPlaceRawRepositoryTest {
     assertThat(row.getUpdatedAt()).isNotNull();
   }
 
+  /** PK 간격과 상태 차이를 건너뛰며 고정 상한 이후에 추가된 원본을 다음 실행으로 남기는지 확인합니다. */
+  @Test
+  void successfulKeysetTraversalHonorsProviderStatusAndFixedUpperBound() {
+    service.saveSuccess("TOUR_API", "001", PAYLOAD, FIRST);
+    service.saveFailure("TOUR_API", "002", null, Reason.TRANSIENT);
+    service.saveSuccess("CULTURE", "003", "{}", FIRST);
+    service.saveSuccess("TOUR_API", "004", PAYLOAD, FIRST);
+    long upperBound = queryService.findSucceededUpperBound("TOUR_API");
+    var first = queryService.findSucceededAfter("TOUR_API", 0, upperBound, 1);
+    service.saveSuccess("TOUR_API", "005", PAYLOAD, FIRST);
+    // 앞선 행의 상태가 변해도 offset처럼 다음 성공 행을 건너뛰지 않아야 합니다.
+    service.saveFailure("TOUR_API", "001", null, Reason.TRANSIENT);
+
+    var next = queryService.findSucceededAfter("TOUR_API", first.getFirst().rawId(), upperBound, 1);
+
+    assertThat(first)
+        .extracting(com.todayit.place.raw.service.model.RawPlaceSnapshot::sourceId)
+        .containsExactly("001");
+    assertThat(next)
+        .extracting(com.todayit.place.raw.service.model.RawPlaceSnapshot::sourceId)
+        .containsExactly("004");
+    assertThat(queryService.findSucceededAfter("TOUR_API", next.getFirst().rawId(), upperBound, 1))
+        .isEmpty();
+    assertThat(queryService.findSucceededUpperBound("TOUR_API")).isGreaterThan(upperBound);
+  }
+
   /** 실패 시 성공 원본을 보존하고 복구 성공 시 오류를 지우는지 검증합니다. */
   @Test
   void failurePreservesSuccessfulSnapshotAndRecoveryClearsError() {
@@ -234,7 +260,7 @@ class ExternalPlaceRawRepositoryTest {
    * 재수집에 필요한 원천 ID와 관광타입을 가진 목록 JSON을 생성합니다.
    *
    * @param sourceId 공급원 장소 ID
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 원천 ID와 관광타입을 포함하는 재수집용 목록 JSON
    */
   private String listPayload(String sourceId) {
     return "{\"list\":{\"contentid\":\""

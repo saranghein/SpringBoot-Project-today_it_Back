@@ -350,17 +350,191 @@ class TourApiRawCollectionServiceTest {
    * 저장된 목록을 포함하는 재수집 대상 스냅샷을 생성합니다.
    *
    * @param id 테스트 원천 장소 ID
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 원천 ID와 저장된 목록 JSON을 포함하는 재수집 대상
    */
   private RawRetryTarget retryTarget(String id) {
     return new RawRetryTarget(id, "{\"list\":" + item(id).payloadJson() + "}");
+  }
+
+  /** 페이지를 따라 마지막 항목까지 수집하고 필터·페이지 크기를 유지하는지 확인합니다. */
+  @Test
+  void collectsEveryPageWithSameFiltersAndSize() {
+    when(source.fetchPage(any()))
+        .thenReturn(
+            new SourcePage(List.of(item("001"), item("002")), "v1:2", 3, Instant.now()),
+            new SourcePage(List.of(item("003")), "", 3, Instant.now()));
+    givenDetails();
+
+    assertThat(service.collectAll(2))
+        .isEqualTo(new com.todayit.place.raw.service.model.RawCollectionResult(3, 3, 0));
+
+    var requests = ArgumentCaptor.forClass(SourcePageRequest.class);
+    verify(source, org.mockito.Mockito.times(2)).fetchPage(requests.capture());
+    assertThat(requests.getAllValues())
+        .extracting(SourcePageRequest::cursor)
+        .containsExactly("", "v1:2");
+    assertThat(requests.getAllValues())
+        .allSatisfy(
+            request -> {
+              assertThat(request.pageSize()).isEqualTo(2);
+              assertThat(request.filters())
+                  .containsExactlyInAnyOrderEntriesOf(
+                      Map.of("lDongRegnCd", "11", "contentTypeId", "12"));
+            });
+    verify(store).saveSuccess(eq("TOUR_API"), eq("003"), anyString(), any());
+  }
+
+  /** 상세의 일시 오류가 있어도 다음 페이지를 수집하고 실패 원본을 남기는지 확인합니다. */
+  @Test
+  void fullCollectionContinuesAfterIndividualDetailFailure() {
+    when(source.fetchPage(any()))
+        .thenReturn(
+            new SourcePage(List.of(item("001")), "v1:2", 2, Instant.now()),
+            new SourcePage(List.of(item("002")), "", 2, Instant.now()));
+    when(source.fetchComponent(any()))
+        .thenAnswer(
+            call -> {
+              SourceComponentRequest request = call.getArgument(0);
+              if (request.sourceId().equals("001")) {
+                throw new PlaceSourceException(Reason.TRANSIENT);
+              }
+              return detail(
+                  request,
+                  request.component() == Component.IMAGES
+                      ? "[]"
+                      : "[{\"contentid\":\"002\",\"title\":\"장소\"}]");
+            });
+
+    var result = service.collectAll(1);
+
+    assertThat(result.succeeded()).isEqualTo(1);
+    assertThat(result.failed()).isEqualTo(1);
+    verify(store).saveFailure(eq("TOUR_API"), eq("001"), anyString(), eq(Reason.TRANSIENT));
+    verify(store).saveSuccess(eq("TOUR_API"), eq("002"), anyString(), any());
+  }
+
+  /** 인증·쿼터 오류가 발생하면 다음 페이지를 요청하지 않는지 확인합니다. */
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.EnumSource(
+      value = Reason.class,
+      names = {"AUTHENTICATION", "RATE_LIMIT"})
+  void fullCollectionStopsBeforeNextPageAfterCredentialsOrQuotaFailure(Reason reason) {
+    when(source.fetchPage(any()))
+        .thenReturn(new SourcePage(List.of(item("001")), "v1:2", 2, Instant.now()));
+    when(source.fetchComponent(any())).thenThrow(new PlaceSourceException(reason));
+
+    assertThat(service.collectAll(1).failed()).isEqualTo(1);
+
+    verify(source).fetchPage(any());
+    verify(store).saveFailure(eq("TOUR_API"), eq("001"), anyString(), eq(reason));
+  }
+
+  /** 다음 목록 조회 실패가 이미 저장한 원본을 지우거나 가짜 실패 행을 만들지 않는지 확인합니다. */
+  @Test
+  void nextPageFailurePropagatesAfterEarlierRawCommits() {
+    when(source.fetchPage(any()))
+        .thenReturn(new SourcePage(List.of(item("001")), "v1:2", 2, Instant.now()))
+        .thenThrow(new PlaceSourceException(Reason.TRANSIENT));
+    givenDetails();
+
+    assertThatThrownBy(() -> service.collectAll(1)).isInstanceOf(PlaceSourceException.class);
+
+    verify(store).saveSuccess(eq("TOUR_API"), eq("001"), anyString(), any());
+    verify(store, never()).saveFailure(anyString(), anyString(), any(), any());
+  }
+
+  /** cursor 반복을 상세 요청 전에 거부해 무한 수집을 막는지 확인합니다. */
+  @Test
+  void fullCollectionRejectsRepeatedCursor() {
+    when(source.fetchPage(any()))
+        .thenReturn(
+            new SourcePage(List.of(item("001")), "v1:2", 3, Instant.now()),
+            new SourcePage(List.of(item("002")), "v1:2", 3, Instant.now()));
+    givenDetails();
+
+    assertThatThrownBy(() -> service.collectAll(1))
+        .isInstanceOf(PlaceSourceException.class)
+        .extracting(exception -> ((PlaceSourceException) exception).getReason())
+        .isEqualTo(Reason.INVALID_RESPONSE);
+
+    verify(store, never()).saveSuccess(eq("TOUR_API"), eq("002"), anyString(), any());
+  }
+
+  /** 페이지 간 중복 ID나 전체 건수 변경을 완전한 수집으로 보고하지 않는지 확인합니다. */
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.CsvSource({"001,2", "002,3"})
+  void fullCollectionRejectsDuplicateIdsOrChangingTotals(String secondId, long secondTotal) {
+    when(source.fetchPage(any()))
+        .thenReturn(
+            new SourcePage(List.of(item("001")), "v1:2", 2, Instant.now()),
+            new SourcePage(List.of(item(secondId)), "", secondTotal, Instant.now()));
+    givenDetails();
+
+    assertThatThrownBy(() -> service.collectAll(1)).isInstanceOf(PlaceSourceException.class);
+
+    verify(store).saveSuccess(eq("TOUR_API"), eq("001"), anyString(), any());
+    verify(source, org.mockito.Mockito.times(3)).fetchComponent(any());
+  }
+
+  /** 공급원 전체가 0건이면 정상 종료하고 상세 조회나 원본 저장을 하지 않는지 확인합니다. */
+  @Test
+  void emptyFullCollectionIsNormal() {
+    givenPage();
+
+    assertThat(service.collectAll(10).attempted()).isZero();
+
+    verifyNoInteractions(store);
+    verify(source, never()).fetchComponent(any());
+  }
+
+  /** 끝 페이지가 전체 건수보다 적은 원본만 반환했을 때 성공으로 보고하지 않는지 확인합니다. */
+  @Test
+  void fullCollectionRejectsPrematureEndWithoutDeletingEarlierRaw() {
+    when(source.fetchPage(any()))
+        .thenReturn(new SourcePage(List.of(item("001")), "", 2, Instant.now()));
+    givenDetails();
+
+    assertThatThrownBy(() -> service.collectAll(1)).isInstanceOf(PlaceSourceException.class);
+
+    verify(store).saveSuccess(eq("TOUR_API"), eq("001"), anyString(), any());
+    verify(store, never()).saveFailure(anyString(), anyString(), any(), any());
+  }
+
+  /**
+   * 전체 수집도 페이지 크기 오류를 외부 호출 전에 거부하는지 확인합니다.
+   *
+   * @param size 잘못된 페이지 크기
+   */
+  @ParameterizedTest
+  @ValueSource(ints = {0, 11})
+  void fullCollectionValidatesPageSizeBeforeCallingSource(int size) {
+    assertThatThrownBy(() -> service.collectAll(size)).isInstanceOf(IllegalArgumentException.class);
+    verify(source, never()).fetchPage(any());
+    verifyNoInteractions(store);
+  }
+
+  /** DB 저장 오류를 수집 오류로 바꾸거나 다음 페이지를 계속 호출하지 않는지 확인합니다. */
+  @Test
+  void fullCollectionAbortsOnRawStorageFailure() {
+    when(source.fetchPage(any()))
+        .thenReturn(new SourcePage(List.of(item("001")), "v1:2", 2, Instant.now()));
+    givenDetails();
+    doThrow(new DataAccessResourceFailureException("fixture"))
+        .when(store)
+        .saveSuccess(anyString(), anyString(), anyString(), any());
+
+    assertThatThrownBy(() -> service.collectAll(1))
+        .isInstanceOf(DataAccessResourceFailureException.class);
+
+    verify(source).fetchPage(any());
+    verify(store, never()).saveFailure(anyString(), anyString(), any(), any());
   }
 
   /**
    * 지정한 원천 ID를 가진 목록 항목을 생성합니다.
    *
    * @param id 테스트 원천 장소 ID
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 원천 ID와 관광타입을 포함하는 목록 항목
    */
   private SourceItem item(String id) {
     return new SourceItem(
@@ -398,8 +572,8 @@ class TourApiRawCollectionServiceTest {
    * 요청한 구성 요소와 원천 ID에 대응하는 상세 응답을 생성합니다.
    *
    * @param request 요청한 원천 ID와 구성 요소
-   * @param payload 정제 또는 복원할 원본 JSON
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @param payload 상세 응답 JSON
+   * @return 요청한 원천 ID와 구성 요소에 대응하는 상세 응답
    */
   private SourceComponent detail(SourceComponentRequest request, String payload) {
     return new SourceComponent(request.sourceId(), request.component(), payload, Instant.now());

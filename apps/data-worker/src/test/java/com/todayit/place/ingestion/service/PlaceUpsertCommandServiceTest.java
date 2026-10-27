@@ -113,7 +113,7 @@ class PlaceUpsertCommandServiceTest {
   /**
    * 저장 검증에 사용할 정상 정제 결과를 생성합니다.
    *
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 장소와 원천 ID를 포함하는 정상 정제 결과
    */
   private PlaceNormalizationResult normalized() {
     return new PlaceNormalizationResult(

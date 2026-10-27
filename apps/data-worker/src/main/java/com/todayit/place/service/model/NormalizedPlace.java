@@ -15,7 +15,7 @@ import java.util.List;
  * @param sigunguCode 법정동 시군구 코드 3자리
  * @param sourceCategoryCode 원천 소분류 코드
  * @param description 일반 텍스트 소개, 없으면 null
- * @param images 원천 이미지 후보, 서비스 공개 전 권리 확인 필요
+ * @param images 정제한 원천 이미지. 저장 시 원본 URL만 반영하며 메타데이터는 원본 payload에 보존
  */
 public record NormalizedPlace(
     String name,
@@ -47,7 +47,7 @@ public record NormalizedPlace(
     images = List.copyOf(images);
   }
 
-  /** API 모듈 의존 없이 사용하는 서비스 상위 카테고리입니다. */
+  /** 정제된 장소의 서비스 카테고리입니다. */
   public enum Category {
     RESTAURANT,
     CAFE_DESSERT,
@@ -61,7 +61,7 @@ public record NormalizedPlace(
   }
 
   /**
-   * 다운로드·가공하지 않은 원천 이미지 후보입니다. 저작권 코드는 공개 이용 허가를 뜻하지 않습니다.
+   * 다운로드·가공하지 않은 원천 이미지입니다. 저작권 코드 자체로 공개 이용 허가를 판정하지 않습니다.
    *
    * @param url 원본 HTTP(S) URL
    * @param thumbnailUrl 축소 이미지 URL, 없으면 null

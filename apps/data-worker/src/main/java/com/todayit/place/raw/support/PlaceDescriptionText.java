@@ -23,7 +23,6 @@ public final class PlaceDescriptionText {
           HTML.Tag.H3,
           HTML.Tag.TR);
 
-  /** 유틸리티 인스턴스를 만들지 않습니다. */
   private PlaceDescriptionText() {}
 
   /**

@@ -1,7 +1,7 @@
 package com.todayit.place.ingestion.service.model;
 
 /**
- * 서비스 반영 조정 결과입니다. 현재 기본 설정에서는 저장 기능이 비활성입니다.
+ * 장소 저장 결과입니다.
  *
  * @param sourceId 공급원 장소 ID
  * @param status 반영 또는 보류 여부

@@ -15,7 +15,6 @@ import tools.jackson.databind.JsonNode;
 /** 공급원 응답의 구조와 페이지 진행을 검증하는 내부 지원 코드입니다. */
 public final class SourceResponses {
 
-  /** 응답 검증용 정적 기능만 사용하도록 인스턴스 생성을 막습니다. */
   private SourceResponses() {}
 
   /**

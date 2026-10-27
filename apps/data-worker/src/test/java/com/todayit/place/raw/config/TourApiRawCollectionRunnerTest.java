@@ -3,6 +3,7 @@ package com.todayit.place.raw.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.todayit.place.raw.config.RawCollectionProperties.Mode;
@@ -128,12 +129,24 @@ class TourApiRawCollectionRunnerTest {
    *
    * @param service 테스트에서 사용할 수집 서비스
    * @param mode 검증할 실행 모드
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 지정한 모드로 최대 10건을 처리하는 수집 Runner
    */
   private TourApiRawCollectionRunner runner(TourApiRawCollectionService service, Mode mode) {
     return new TourApiRawCollectionRunner(
         service,
         new RawCollectionProperties(true, 10, mode),
         mock(PlaceNormalizationQueryService.class));
+  }
+
+  /** 전체 순회 후 개별 상세 실패가 있으면 최종 실행을 실패시키는지 확인합니다. */
+  @Test
+  void fullModeRunsAllPagesAndFailsOnIndividualCollectionFailure() {
+    var service = mock(TourApiRawCollectionService.class);
+    when(service.collectAll(10)).thenReturn(new RawCollectionResult(25, 24, 1));
+
+    assertThatThrownBy(() -> runner(service, Mode.FULL).run(new DefaultApplicationArguments()))
+        .isInstanceOf(IllegalStateException.class);
+
+    verify(service).collectAll(10);
   }
 }

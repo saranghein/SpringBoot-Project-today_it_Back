@@ -153,8 +153,8 @@ class PlaceIngestionServiceTest {
    * 지정한 원천 ID와 분류를 가진 성공 원본 스냅샷을 생성합니다.
    *
    * @param sourceId 공급원 장소 ID
-   * @param code 검증할 원천 분류 또는 응답 코드
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @param code 원천 소분류 코드
+   * @return 지정한 원천 ID와 소분류 코드를 가진 성공 원본 스냅샷
    */
   private RawPlaceSnapshot snapshot(String sourceId, String code) {
     String payload =
@@ -164,5 +164,94 @@ class PlaceIngestionServiceTest {
         """
             .formatted(sourceId, code, sourceId, sourceId);
     return new RawPlaceSnapshot(1, "TOUR_API", sourceId, "SUCCESS", payload);
+  }
+
+  /** 보류만 있는 첫 묶음도 통과하고 건별 실패 후에도 마지막 묶음까지 처리하는지 확인합니다. */
+  @Test
+  void fullIngestionAdvancesPastDeferredAndFailedRowsAndAggregatesEveryBatch() {
+    when(query.findSucceededUpperBound("TOUR_API")).thenReturn(70L);
+    when(query.findSucceededAfter("TOUR_API", 0, 70, 2))
+        .thenReturn(List.of(withId(10, "EX050800"), withId(20, "EV020200")));
+    when(query.findSucceededAfter("TOUR_API", 20, 70, 2))
+        .thenReturn(List.of(withId(30, "VE030100"), withId(40, "VE030100")));
+    when(query.findSucceededAfter("TOUR_API", 40, 70, 2))
+        .thenReturn(List.of(withId(50, "VE030100")));
+    when(query.findSucceededAfter("TOUR_API", 50, 70, 2)).thenReturn(List.of());
+    when(store.upsert(any()))
+        .thenReturn(new PlaceUpsertResult("30", Status.REGION_NOT_FOUND, null))
+        .thenThrow(new DataIntegrityViolationException("fixture"))
+        .thenReturn(new PlaceUpsertResult("50", Status.APPLIED, 1));
+
+    assertThat(service.ingestAllTourApi(2)).isEqualTo(new PlaceIngestionResult(5, 1, 1, 1, 1, 1));
+
+    verify(query).findSucceededUpperBound("TOUR_API");
+    verify(query).findSucceededAfter("TOUR_API", 50, 70, 2);
+    verify(store, org.mockito.Mockito.times(3)).upsert(any());
+  }
+
+  /** 성공 원본이 없으면 조회 상한만 확인하고 정상 종료하는지 검증합니다. */
+  @Test
+  void fullIngestionWithNoSuccessfulRowsDoesNotFetchOrStoreBatches() {
+    when(query.findSucceededUpperBound("TOUR_API")).thenReturn(0L);
+
+    assertThat(service.ingestAllTourApi(10)).isEqualTo(new PlaceIngestionResult(0, 0, 0, 0, 0, 0));
+
+    verifyNoInteractions(store);
+    verify(query).findSucceededUpperBound("TOUR_API");
+    org.mockito.Mockito.verifyNoMoreInteractions(query);
+  }
+
+  /** 전체 실행도 범위를 벗어난 묶음 크기를 DB 접근 전에 거부하는지 확인합니다. */
+  @ParameterizedTest
+  @ValueSource(ints = {0, 11})
+  void fullIngestionValidatesBatchSizeBeforeDatabaseAccess(int size) {
+    assertThatThrownBy(() -> service.ingestAllTourApi(size))
+        .isInstanceOf(IllegalArgumentException.class);
+    verifyNoInteractions(query, store);
+  }
+
+  /** 이후 묶음의 DB 읽기 오류를 최종 성공으로 바꾸지 않는지 확인합니다. */
+  @Test
+  void fullIngestionPropagatesLaterReadFailureAfterEarlierCommits() {
+    when(query.findSucceededUpperBound("TOUR_API")).thenReturn(2L);
+    when(query.findSucceededAfter("TOUR_API", 0, 2, 1)).thenReturn(List.of(withId(1, "VE030100")));
+    when(query.findSucceededAfter("TOUR_API", 1, 2, 1))
+        .thenThrow(new DataIntegrityViolationException("fixture"));
+    when(store.upsert(any())).thenReturn(new PlaceUpsertResult("1", Status.APPLIED, 1));
+
+    assertThatThrownBy(() -> service.ingestAllTourApi(1))
+        .isInstanceOf(DataIntegrityViolationException.class);
+
+    verify(store).upsert(any());
+  }
+
+  /**
+   * ID가 전진하지 않거나 실행 상한을 벗어나면 잘못된 묶음을 저장하지 않는지 확인합니다.
+   *
+   * @param invalidId 잘못 조회된 마지막 원본 ID
+   */
+  @ParameterizedTest
+  @ValueSource(longs = {0L, 3L})
+  void fullIngestionRejectsNonAdvancingOrOutOfRangeRawIds(long invalidId) {
+    when(query.findSucceededUpperBound("TOUR_API")).thenReturn(2L);
+    when(query.findSucceededAfter("TOUR_API", 0, 2, 1))
+        .thenReturn(List.of(withId(invalidId, "VE030100")));
+
+    assertThatThrownBy(() -> service.ingestAllTourApi(1)).isInstanceOf(IllegalStateException.class);
+
+    verifyNoInteractions(store);
+  }
+
+  /**
+   * 순차 조회에 사용할 고유 PK를 가진 원본을 만듭니다.
+   *
+   * @param id 원본 PK와 테스트 원천 ID
+   * @param code 소분류 코드
+   * @return 지정한 PK의 원본 스냅샷
+   */
+  private RawPlaceSnapshot withId(long id, String code) {
+    var original = snapshot(Long.toString(id), code);
+    return new RawPlaceSnapshot(
+        id, original.provider(), original.sourceId(), original.status(), original.payloadJson());
   }
 }

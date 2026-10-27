@@ -23,7 +23,7 @@ public class PlaceUpsertCommandService {
   private final PlaceSourceRepository repository;
 
   /**
-   * 지역 조회와 원천 장소 저장 계약을 받습니다. 임시 지역이나 가짜 저장 구현은 등록하지 않습니다.
+   * 지역 조회 서비스와 원천 장소 저장소를 주입합니다.
    *
    * @param regionQueryService 시도·시군구 코드로 실제 지역 ID를 찾는 조회 구현
    * @param repository 원천 식별자 기반 멱등 저장 구현
@@ -35,7 +35,7 @@ public class PlaceUpsertCommandService {
   }
 
   /**
-   * 정상 정제 결과만 지역과 연결해 저장 계약으로 전달합니다. 외부 API는 호출하지 않습니다.
+   * 정상 정제 결과의 장소·지역 연결·이미지 URL을 함께 반영합니다. 외부 API와 이미지 파일은 요청하지 않습니다.
    *
    * @param result TourAPI 정제 결과
    * @return 반영 또는 보류 결과

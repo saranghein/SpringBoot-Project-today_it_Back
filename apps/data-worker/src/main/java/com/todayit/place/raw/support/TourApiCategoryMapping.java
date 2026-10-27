@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-/** 승인한 소분류만 정확히 일치시킵니다. 접두사 또는 관광타입만으로 허용 대상을 확장하지 않습니다. */
+/** TourAPI 소분류 코드를 서비스 카테고리에 매핑합니다. 접두사나 관광타입으로 분류를 추정하지 않습니다. */
 public final class TourApiCategoryMapping {
 
   private static final Map<String, Category> ALLOWED = allowed();
@@ -51,11 +51,10 @@ public final class TourApiCategoryMapping {
           "C0116001",
           "C0117001");
 
-  /** 유틸리티 인스턴스를 만들지 않습니다. */
   private TourApiCategoryMapping() {}
 
   /**
-   * 승인한 소분류를 조회합니다.
+   * 소분류 코드에 대응하는 서비스 카테고리를 조회합니다.
    *
    * @param code 신분류 소분류 코드
    * @return 서비스 카테고리, 미허용이면 빈 값
@@ -75,7 +74,7 @@ public final class TourApiCategoryMapping {
   }
 
   /**
-   * 제공된 공식 연계 정의서에서 승인한 소분류를 명시적으로 등록합니다.
+   * 소분류 코드와 서비스 카테고리의 매핑을 구성합니다.
    *
    * @return 변경 불가능한 허용 목록
    */

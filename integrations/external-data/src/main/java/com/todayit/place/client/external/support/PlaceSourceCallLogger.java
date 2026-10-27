@@ -14,7 +14,6 @@ public final class PlaceSourceCallLogger {
 
   private static final Logger LOG = LoggerFactory.getLogger(PlaceSourceCallLogger.class);
 
-  /** 정적 호출 로깅 기능만 사용하도록 인스턴스 생성을 막습니다. */
   private PlaceSourceCallLogger() {}
 
   /**

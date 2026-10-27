@@ -1,23 +1,27 @@
 package com.todayit.place.ingestion.repository;
 
 import com.todayit.place.service.model.NormalizedPlace;
+import com.todayit.place.service.model.NormalizedPlace.Image;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 원천 연결·장소 기본값·지역 연결을 호출자의 PostgreSQL 트랜잭션에서 저장합니다. 이미지는 변경하지 않습니다. */
+/** 원천 연결·장소 기본값·지역 연결·이미지 URL을 호출자의 PostgreSQL 트랜잭션에서 저장합니다. */
 @Repository
 @ConditionalOnProperty(name = "todayit.place.upsert.enabled", havingValue = "true")
 public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
 
+  private static final Logger LOG = LoggerFactory.getLogger(PostgresPlaceSourceRepository.class);
   private final EntityManager entityManager;
 
   /**
-   * 현재 트랜잭션에 참여하는 EntityManager를 주입합니다. API 모듈의 Entity에 의존하지 않습니다.
+   * 현재 트랜잭션에 참여하는 EntityManager를 주입합니다.
    *
    * @param entityManager worker의 JPA 저장 세션
    */
@@ -26,7 +30,7 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
   }
 
   /**
-   * 같은 원천의 동시 쓰기를 트랜잭션 잠금으로 직렬화하고 원천 연결로 서비스 장소를 식별합니다.
+   * 같은 원천의 동시 쓰기를 직렬화하고 장소·지역·새 이미지 URL을 반영합니다. 기존 이미지 행은 유지합니다.
    *
    * @param provider 공급원 코드
    * @param sourceId 공급원 장소 ID
@@ -88,7 +92,39 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
         .setParameter("placeId", placeId)
         .setParameter("regionId", regionId)
         .executeUpdate();
+    insertMissingImages(placeId, place.images());
     return placeId;
+  }
+
+  /**
+   * 장소 쓰기 잠금을 보유한 상태에서 동일 장소·URL이 없을 때만 원본 URL을 추가합니다. 이미지 파일은 요청하지 않으며 기존 URL·식별자·시각·다른 출처의 이미지는
+   * 변경하지 않습니다.
+   *
+   * @param placeId 저장한 서비스 장소 ID
+   * @param images 정제된 이미지 목록, 빈 목록 허용
+   */
+  private void insertMissingImages(int placeId, List<Image> images) {
+    int added = 0;
+    for (Image image : images) {
+      added +=
+          entityManager
+              .createNativeQuery(
+                  """
+          INSERT INTO place_image (place_id, image_url)
+          SELECT :placeId, :imageUrl
+          WHERE NOT EXISTS (
+              SELECT 1 FROM place_image WHERE place_id = :placeId AND image_url = :imageUrl
+          )
+          """)
+              .setParameter("placeId", placeId)
+              .setParameter("imageUrl", image.url())
+              .executeUpdate();
+    }
+    LOG.debug(
+        "PLACE_IMAGES_STAGED 장소 이미지 저장 처리 장소번호={} 후보={} 추가={} 커밋대기=true",
+        placeId,
+        images.size(),
+        added);
   }
 
   /**
@@ -126,7 +162,7 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
   }
 
   /**
-   * 원천 기본정보만 갱신합니다. 소개 누락·조회수·활성/삭제 상태·생성 시각·이미지와 사용자 관계를 보존합니다.
+   * 원천 기본정보만 갱신합니다. 소개 누락·조회수·활성/삭제 상태·생성 시각과 사용자 관계를 보존합니다.
    *
    * @param placeId 연결된 서비스 장소 ID
    * @param place 새 정제 값

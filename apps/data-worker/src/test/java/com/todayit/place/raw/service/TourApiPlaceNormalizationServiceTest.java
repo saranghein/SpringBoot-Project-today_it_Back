@@ -41,7 +41,7 @@ class TourApiPlaceNormalizationServiceTest {
   }
 
   /**
-   * 정확히 일치하는 승인 분류 코드만 서비스 분류로 변환하는지 검증합니다.
+   * 등록된 소분류 코드와 정확히 일치할 때 서비스 분류로 변환하는지 검증합니다.
    *
    * @param code 검증할 원천 분류 또는 응답 코드
    * @param category 기대하는 서비스 분류
@@ -84,7 +84,7 @@ class TourApiPlaceNormalizationServiceTest {
   }
 
   /**
-   * 미승인·누락 분류를 관광타입이나 장소명으로 추정하지 않는지 검증합니다.
+   * 미등록·누락 분류를 관광타입이나 장소명으로 추정하지 않는지 검증합니다.
    *
    * @param code 검증할 원천 분류 또는 응답 코드
    */
@@ -354,7 +354,7 @@ class TourApiPlaceNormalizationServiceTest {
    * 테스트 JSON을 성공 원본 스냅샷으로 감싸 정제 결과를 반환합니다.
    *
    * @param payload 정제 또는 복원할 원본 JSON
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 전달한 원본 JSON의 정제 결과
    */
   private PlaceNormalizationResult normalize(ObjectNode payload) {
     return service.normalize(
@@ -365,7 +365,7 @@ class TourApiPlaceNormalizationServiceTest {
    * 테스트 원본의 목록 객체를 반환합니다.
    *
    * @param payload 정제 또는 복원할 원본 JSON
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 원본 JSON의 list 객체
    */
   private ObjectNode list(ObjectNode payload) {
     return (ObjectNode) payload.path("list");
@@ -375,7 +375,7 @@ class TourApiPlaceNormalizationServiceTest {
    * 테스트 원본의 공통 상세 객체를 반환합니다.
    *
    * @param payload 정제 또는 복원할 원본 JSON
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 원본 JSON의 첫 번째 common 상세 객체
    */
   private ObjectNode common(ObjectNode payload) {
     return (ObjectNode) payload.path("common").get(0);
@@ -384,7 +384,7 @@ class TourApiPlaceNormalizationServiceTest {
   /**
    * 필수 상세와 지역·분류를 포함한 정상 원본 JSON을 생성합니다.
    *
-   * @return 테스트 준비 또는 검증에 사용할 값
+   * @return 필수 상세·지역 코드·소분류 코드를 포함하는 정상 원본 JSON
    */
   private ObjectNode payload() {
     return (ObjectNode)
