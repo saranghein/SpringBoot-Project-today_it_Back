@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.IntNode;
 
 /** TourAPI KorService2의 지역 기반 장소 목록과 contentid별 상세 원본을 조회합니다. 지역 코드 목록은 수집하지 않습니다. */
 public final class TourApiPlaceDataSource implements PlaceDataSource {
@@ -72,12 +73,18 @@ public final class TourApiPlaceDataSource implements PlaceDataSource {
     parameters.put("numOfRows", Integer.toString(request.pageSize()));
     parameters.put("arrange", "C");
     JsonNode body = responseBody("/areaBasedList2", parameters);
+    JsonNode rows = body.path("items").path("item");
+    long reportedRows = SourceResponses.nonNegativeNumber(body.path("numOfRows"));
+    if (reportedRows != request.pageSize() && reportedRows != SourceResponses.rows(rows).size()) {
+      throw new PlaceSourceException(Reason.INVALID_RESPONSE);
+    }
+    // TourAPI는 마지막 페이지의 numOfRows에 실제 반환 건수를 넣을 수 있어 요청 크기로 위치를 계산합니다.
     return SourceResponses.page(
         request,
-        body.path("items").path("item"),
+        rows,
         "contentid",
         body.path("totalCount"),
-        body.path("numOfRows"),
+        IntNode.valueOf(request.pageSize()),
         body.path("pageNo"));
   }
 

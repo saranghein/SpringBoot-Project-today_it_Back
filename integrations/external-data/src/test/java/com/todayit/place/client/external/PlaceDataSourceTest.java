@@ -113,6 +113,54 @@ class PlaceDataSourceTest {
     assertThat(requestedUri.get().getQuery()).contains("pageNo=2");
   }
 
+  /**
+   * 마지막 7건을 페이지 크기로 반환해도 요청한 10건 단위로 종료 위치를 계산하는지 검증합니다.
+   *
+   * @param reportedRows 공급원이 반환한 numOfRows
+   */
+  @ParameterizedTest
+  @CsvSource({"7", "10"})
+  void tourLastPartialPageUsesRequestedPageSize(int reportedRows) {
+    responseBody.set(
+        tourPage(
+            "[{\"contentid\":\"761\"},{\"contentid\":\"762\"},{\"contentid\":\"763\"},{\"contentid\":\"764\"},{\"contentid\":\"765\"},{\"contentid\":\"766\"},{\"contentid\":\"767\"}]",
+            767,
+            reportedRows,
+            77));
+
+    var result = tour.fetchPage(page(Component.BASIC, "v1:77", 10, Map.of()));
+
+    assertThat(result.items()).hasSize(7);
+    assertThat(result.nextCursor()).isEmpty();
+    assertThat(requestedUri.get().getQuery()).contains("pageNo=77", "numOfRows=10");
+    assertThat(calls.get()).isEqualTo(1);
+  }
+
+  /** 정상 빈 목록에서 numOfRows도 0인 응답을 허용하는지 검증합니다. */
+  @Test
+  void tourEmptyListAllowsZeroReportedRows() {
+    responseBody.set(tourPage("[]", 0, 0, 1));
+    var result = tour.fetchPage(page(Component.BASIC, "", 10, Map.of()));
+    assertThat(result.items()).isEmpty();
+    assertThat(result.nextCursor()).isEmpty();
+  }
+
+  /** 요청 크기나 실제 반환 건수 어느 쪽과도 일치하지 않는 numOfRows를 거부하는지 검증합니다. */
+  @Test
+  void tourRejectsInconsistentReportedRows() {
+    responseBody.set(tourPage("[{\"contentid\":\"11\"}]", 11, 2, 2));
+    assertReason(
+        Reason.INVALID_RESPONSE, () -> tour.fetchPage(page(Component.BASIC, "v1:2", 10, Map.of())));
+  }
+
+  /** 중간 페이지가 짧은 경우 실제 반환 건수를 numOfRows에 넣어도 누락을 거부하는지 검증합니다. */
+  @Test
+  void tourRejectsTruncatedIntermediatePage() {
+    responseBody.set(tourPage("[{\"contentid\":\"1\"}]", 20, 1, 1));
+    assertReason(
+        Reason.INVALID_RESPONSE, () -> tour.fetchPage(page(Component.BASIC, "", 10, Map.of())));
+  }
+
   /** 정상 빈 관광 목록을 오류로 처리하지 않는지 검증합니다. */
   @Test
   void successfulEmptyTourListIsNotAnError() {
