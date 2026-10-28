@@ -39,61 +39,10 @@ class MemberGoogleRepositoryTest {
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @Test
-  @DisplayName("이메일이 같아도 Google 고유 ID와 가입 방식으로 회원을 구분한다")
-  void findsGoogleMemberByProviderUserId() {
-    // Given
-    String localMemberId = UUID.randomUUID().toString();
-    String googleMemberId = UUID.randomUUID().toString();
-    String email = "same@example.com";
-    String googleUserId = "google-user-123";
-
-    jdbcTemplate.update(
-        """
-                INSERT INTO member (
-                    member_id, email, password, provider, nickname
-                ) VALUES (?, ?, ?, 'LOCAL', ?)
-                """,
-        localMemberId,
-        email,
-        "encoded-password",
-        "로컬테스트회원");
-
-    jdbcTemplate.update(
-        """
-                INSERT INTO member (
-                    member_id, email, provider, provider_user_id, nickname
-                ) VALUES (?, ?, 'GOOGLE', ?, ?)
-                """,
-        googleMemberId,
-        email,
-        googleUserId,
-        "구글테스트회원");
-
-    // When
-    var googleMember =
-        memberRepository.findByProviderAndProviderUserId(MemberProvider.GOOGLE, googleUserId);
-
-    var localMember =
-        memberRepository.findByProviderAndProviderUserId(MemberProvider.LOCAL, googleUserId);
-
-    var unknownMember =
-        memberRepository.findByProviderAndProviderUserId(
-            MemberProvider.GOOGLE, "unknown-google-user");
-
-    // Then
-    assertThat(googleMember).isPresent();
-    assertThat(googleMember.map(Member::getId)).contains(googleMemberId);
-    assertThat(googleMember.map(Member::getProviderUserId)).contains(googleUserId);
-
-    assertThat(localMember).isEmpty();
-    assertThat(unknownMember).isEmpty();
-  }
-
-  @Test
   @DisplayName("Google 회원은 비밀번호 없이 provider_user_id를 저장한다")
   void savesGoogleMember() {
     // Given
-    Member member = Member.createGoogle("new-google@example.com", "google-new-user-123", "구글테스트");
+    Member member = Member.createGoogle("google-new-user-123", "구글테스트");
 
     // When
     memberRepository.saveAndFlush(member);
@@ -102,6 +51,14 @@ class MemberGoogleRepositoryTest {
     assertThat(member.getProvider()).isEqualTo(MemberProvider.GOOGLE);
     assertThat(member.getPassword()).isNull();
     assertThat(member.getProviderUserId()).isEqualTo("google-new-user-123");
+    assertThat(member.getEmail()).isNull();
+
+    // 실제 DB에도 이메일이 NULL로 저장되었는지 확인
+    String storedEmail =
+        jdbcTemplate.queryForObject(
+            "SELECT email FROM member WHERE member_id = ?", String.class, member.getId());
+
+    assertThat(storedEmail).isNull();
 
     // 저장한 Google 계정이 기존 로그인 조회 조건으로 검색되는지 검증
     var savedMember =
@@ -119,9 +76,9 @@ class MemberGoogleRepositoryTest {
     // Given
     String googleUserId = "google-duplicate-" + UUID.randomUUID();
 
-    Member firstMember = Member.createGoogle("first@example.com", googleUserId, "첫번째회원");
+    Member firstMember = Member.createGoogle(googleUserId, "첫번째회원");
 
-    Member secondMember = Member.createGoogle("second@example.com", googleUserId, "두번째회원");
+    Member secondMember = Member.createGoogle(googleUserId, "두번째회원");
 
     // 첫 번째 회원 저장
     memberRepository.saveAndFlush(firstMember);

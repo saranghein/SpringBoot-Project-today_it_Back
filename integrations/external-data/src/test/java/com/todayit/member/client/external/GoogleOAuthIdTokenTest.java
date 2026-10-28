@@ -1,6 +1,8 @@
 package com.todayit.member.client.external;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.nimbusds.jose.JOSEException;
@@ -139,8 +141,8 @@ class GoogleOAuthIdTokenTest {
 
     // Then
     assertEquals("google-user-123", identity.providerUserId());
-    assertEquals("test@gmail.com", identity.email());
-    assertEquals(true, identity.emailVerified());
+    assertNull(identity.email());
+    assertFalse(identity.emailVerified());
   }
 
   @ParameterizedTest(name = "{index}: iss={0}, aud={1}, azp={2}, expired={3}")

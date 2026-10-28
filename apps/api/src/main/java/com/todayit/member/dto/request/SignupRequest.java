@@ -8,20 +8,20 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.Map;
 
 /**
- * LOCAL 및 GOOGLE 회원가입 요청입니다.
+ * LOCAL, GOOGLE 및 KAKAO 회원가입 요청입니다.
  *
  * @param provider 회원가입 방식. 생략하면 LOCAL
  * @param email LOCAL 회원 이메일
  * @param emailVerificationToken LOCAL 이메일 인증 완료 토큰
  * @param password LOCAL 회원 비밀번호
- * @param signupToken GOOGLE 회원가입용 임시 토큰
+ * @param signupToken GOOGLE 또는 KAKAO 회원가입용 임시 토큰
  * @param nickname 회원 닉네임
  * @param agreements 약관 코드별 동의 여부
  */
-@Schema(description = "LOCAL 및 GOOGLE 통합 회원가입 요청")
+@Schema(description = "LOCAL, GOOGLE 및 KAKAO 통합 회원가입 요청")
 public record SignupRequest(
     @Schema(
-            description = "회원가입 방식입니다. LOCAL 또는 GOOGLE을 지원하며 생략 시 LOCAL입니다.",
+            description = "회원가입 방식입니다. LOCAL 또는 GOOGLE 및 KAKAO을 지원하며 생략 시 LOCAL입니다.",
             example = "LOCAL",
             defaultValue = "LOCAL")
         MemberProvider provider,
@@ -34,7 +34,7 @@ public record SignupRequest(
             format = "password",
             accessMode = Schema.AccessMode.WRITE_ONLY)
         String password,
-    @Schema(description = "GOOGLE 인증 완료 후 발급받은 회원가입용 임시 토큰입니다.") String signupToken,
+    @Schema(description = "GOOGLE 또는 KAKAO 인증 완료 후 발급받은 회원가입용 임시 토큰입니다.") String signupToken,
     @Schema(
             description = "닉네임은 앞뒤 공백 제거 후 한글, 영문, 숫자 2~8자입니다.",
             requiredMode = Schema.RequiredMode.REQUIRED)
@@ -86,26 +86,28 @@ public record SignupRequest(
   }
 
   /**
-   * 가입 방식에 따라 필수 입력값을 검증합니다.
+   * 회원가입 방식에 따라 필수 입력값을 검증합니다.
    *
    * @throws InvalidRequestException 입력값이 유효하지 않은 경우
    */
   public void validate() {
-
-    // LOCAL 회원은 이메일 인증과 비밀번호가 필요함
+    // LOCAL 회원가입
     if (provider == MemberProvider.LOCAL) {
       validateLocal();
 
-      // GOOGLE 회원은 Google 인증 완료 후 발급한 signupToken이 필요함
+      // GOOGLE 회원가입
     } else if (provider == MemberProvider.GOOGLE) {
       validateGoogle();
 
+      // KAKAO 회원가입
+    } else if (provider == MemberProvider.KAKAO) {
+      validateKakao();
+
     } else {
-      // KAKAO는 추후 별도 인증 흐름을 구현한 뒤 허용
       throw new InvalidRequestException("지원하지 않는 회원가입 방식입니다.");
     }
 
-    // 가입 방식과 무관하게 닉네임과 약관 정보는 필수
+    // 모든 가입 방식에서 닉네임과 약관 동의는 필수
     validateNickname();
 
     if (agreements == null || agreements.isEmpty()) {
@@ -145,10 +147,24 @@ public record SignupRequest(
       throw new InvalidRequestException("Google 회원가입 토큰은 필수입니다.");
     }
 
-    // Google 이메일과 사용자 ID는 서버에 저장된 인증 정보에서 가져옴
+    // Google 고유 ID는 서버에 저장된 가입 토큰 정보에서 가져옴
     // 프론트가 임의로 전달한 이메일이나 비밀번호는 받지 않음
     if (email != null || emailVerificationToken != null || password != null) {
       throw new InvalidRequestException("GOOGLE 회원가입에는 이메일 인증 정보나 비밀번호를 입력할 수 없습니다.");
+    }
+  }
+
+  /** KAKAO 회원가입에 필요한 입력값을 검증합니다. */
+  private void validateKakao() {
+    // Kakao 인증 완료 후 발급받은 임시 가입 토큰 필수
+    if (signupToken == null || signupToken.isBlank()) {
+      throw new InvalidRequestException("Kakao 회원가입 토큰은 필수입니다.");
+    }
+
+    // Kakao 고유 ID는 서버에 저장된 가입 토큰 정보에서 가져옴
+    // 클라이언트가 임의로 이메일이나 비밀번호를 전달하지 않도록 차단
+    if (email != null || emailVerificationToken != null || password != null) {
+      throw new InvalidRequestException("KAKAO 회원가입에는 이메일 인증 정보나 비밀번호를 입력할 수 없습니다.");
     }
   }
 

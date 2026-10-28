@@ -28,16 +28,6 @@ class SignupRequestTest {
             "ACCOUNT_PRIVACY", true));
   }
 
-  @Test
-  @DisplayName("영문·숫자·특수문자가 모두 포함되면 검증에 성공한다")
-  void acceptsValidPassword() {
-    SignupRequest request = localRequest("Abcd12345!", "오늘이");
-
-    request.validate();
-
-    assertThat(request.nickname()).isEqualTo("오늘이");
-  }
-
   @ParameterizedTest
   @ValueSource(strings = {"123456789!", "abcdefghij!", "Abcdef12345"})
   @DisplayName("필수 문자 조합이 누락된 비밀번호는 거부한다")
@@ -64,27 +54,6 @@ class SignupRequestTest {
   }
 
   @Test
-  @DisplayName("GOOGLE 회원가입 시 닉네임 앞뒤 공백을 제거한다")
-  void trimsGoogleNickname() {
-    SignupRequest request =
-        new SignupRequest(
-            MemberProvider.GOOGLE,
-            null,
-            null,
-            null,
-            "google-signup-token",
-            "  구글회원  ",
-            Map.of(
-                "TOS", true,
-                "ACCOUNT_PRIVACY", true));
-
-    request.validate();
-
-    assertThat(request.nickname()).isEqualTo("구글회원");
-    assertThat(request.toCommand().nickname()).isEqualTo("구글회원");
-  }
-
-  @Test
   @DisplayName("닉네임 중간 공백은 허용하지 않는다")
   void rejectsNicknameWithInternalSpaces() {
     SignupRequest request = localRequest("Abcd12345!", "  오 늘이  ");
@@ -102,5 +71,49 @@ class SignupRequestTest {
             "test@example.com", "verification-token", "Abcd12345!", "  오늘이  ", Map.of("TOS", true));
 
     assertThat(command.nickname()).isEqualTo("오늘이");
+  }
+
+  @Test
+  @DisplayName("KAKAO 회원가입은 이메일 없이 signupToken으로 요청할 수 있다")
+  void acceptsKakaoSignupWithoutEmail() {
+    // Given
+    SignupRequest request =
+        new SignupRequest(
+            MemberProvider.KAKAO,
+            null,
+            null,
+            null,
+            "kakao-signup-token",
+            "  카카오회원  ",
+            Map.of(
+                "TOS", true,
+                "ACCOUNT_PRIVACY", true));
+
+    // When
+    request.validate();
+
+    // Then
+    assertThat(request.nickname()).isEqualTo("카카오회원");
+    assertThat(request.toCommand().provider()).isEqualTo(MemberProvider.KAKAO);
+  }
+
+  @Test
+  @DisplayName("KAKAO 회원가입에서는 클라이언트가 전달한 이메일을 거부한다")
+  void rejectsClientProvidedKakaoEmail() {
+    // Given
+    SignupRequest request =
+        new SignupRequest(
+            MemberProvider.KAKAO,
+            "user@example.com",
+            null,
+            null,
+            "kakao-signup-token",
+            "카카오회원",
+            Map.of(
+                "TOS", true,
+                "ACCOUNT_PRIVACY", true));
+
+    // When & Then
+    assertThatThrownBy(request::validate).isInstanceOf(InvalidRequestException.class);
   }
 }

@@ -48,7 +48,7 @@ public class GoogleSignupTokenService {
    * @throws IllegalStateException 토큰 생성 또는 정보 직렬화에 실패한 경우
    */
   public String issue(GoogleIdentity identity) {
-    // Google 계정 식별자, 이메일 및 인증 여부 확인
+    // Google 계정 고유 ID 검증
     if (!isValidIdentity(identity)) {
       throw new IllegalArgumentException("유효한 Google 인증 정보가 필요합니다.");
     }
@@ -63,7 +63,10 @@ public class GoogleSignupTokenService {
     String payload;
 
     try {
-      payload = objectMapper.writeValueAsString(identity);
+      // Google 고유 ID만 Redis에 저장
+      GoogleIdentity signupIdentity = new GoogleIdentity(identity.providerUserId(), null, false);
+
+      payload = objectMapper.writeValueAsString(signupIdentity);
     } catch (JacksonException exception) {
       throw new IllegalStateException("Google 회원가입 정보 직렬화에 실패했습니다.", exception);
     }
@@ -81,7 +84,6 @@ public class GoogleSignupTokenService {
    * @param signupToken Google 로그인에서 발급한 임시 가입 토큰
    * @return Google에서 인증된 사용자 정보
    * @throws BusinessException 토큰이 만료되었거나 유효하지 않은 경우
-   * @throws IllegalStateException 저장된 Google 인증 정보 복원에 실패한 경우
    */
   public GoogleIdentity getVerifiedIdentity(String signupToken) {
 
@@ -102,8 +104,7 @@ public class GoogleSignupTokenService {
       // JSON으로 저장했던 Google 계정 정보를 다시 객체로 변환
       identity = objectMapper.readValue(payload, GoogleIdentity.class);
     } catch (JacksonException exception) {
-      // 서버에 저장된 데이터가 손상된 경우 내부 오류로 처리
-      throw new IllegalStateException("Google 회원가입 인증 정보 복원에 실패했습니다.", exception);
+      throw new BusinessException(MemberErrorCode.GOOGLE_SIGNUP_TOKEN_INVALID);
     }
 
     // 복원한 데이터가 정상적인 Google 인증 정보인지 재확인
@@ -111,7 +112,7 @@ public class GoogleSignupTokenService {
       throw new BusinessException(MemberErrorCode.GOOGLE_SIGNUP_TOKEN_INVALID);
     }
 
-    return identity;
+    return new GoogleIdentity(identity.providerUserId(), null, false);
   }
 
   /**
@@ -164,19 +165,15 @@ public class GoogleSignupTokenService {
   }
 
   /**
-   * Redis에 보관할 Google 사용자 정보가 유효한지 확인합니다.
+   * Google 사용자 고유 ID가 유효한지 확인합니다.
    *
    * @param identity Google 사용자 정보
-   * @return 필요한 인증 정보가 모두 유효하면 true
+   * @return 고유 ID가 유효하면 true
    */
   private boolean isValidIdentity(GoogleIdentity identity) {
     return identity != null
         && identity.providerUserId() != null
         && !identity.providerUserId().isBlank()
-        && identity.providerUserId().length() <= 255
-        && identity.email() != null
-        && !identity.email().isBlank()
-        && identity.email().length() <= 100
-        && identity.emailVerified();
+        && identity.providerUserId().length() <= 255;
   }
 }

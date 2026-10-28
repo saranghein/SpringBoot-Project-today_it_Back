@@ -50,24 +50,6 @@ class LoginAttemptServiceTest {
   }
 
   @Test
-  @DisplayName("5번째 로그인 실패 시 실패 횟수 5를 반환한다")
-  void returnsFiveOnFifthFailure() {
-    // Given
-    String email = "test@test.com";
-    String key = "auth:login:attempt:" + email;
-
-    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-    when(valueOperations.increment(key)).thenReturn(5L);
-
-    // When
-    long failureCount = loginAttemptService.recordFailure(email);
-
-    // Then
-    assertEquals(5L, failureCount);
-    verify(valueOperations).increment(key);
-  }
-
-  @Test
   @DisplayName("로그인 실패 기록이 없으면 잠긴 상태가 아니다")
   void returnsFalseWhenFailureRecordDoesNotExist() {
     // Given

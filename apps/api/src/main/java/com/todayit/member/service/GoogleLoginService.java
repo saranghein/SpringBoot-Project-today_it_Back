@@ -49,7 +49,7 @@ public class GoogleLoginService {
    * @param authorizationCode Google 인가 코드
    * @param redirectUri Google 인증 요청에 사용한 Redirect URI
    * @return Google 로그인 또는 신규 회원가입 결과
-   * @throws BusinessException Google 인증 실패, 이메일 미인증 또는 비활성 회원인 경우
+   * @throws BusinessException Google 인증 실패, 비활성 회원인 경우
    * @throws IllegalStateException 기존 회원에게 유효한 권한이 없는 경우
    */
   public GoogleLoginResult login(String authorizationCode, String redirectUri) {
@@ -64,10 +64,12 @@ public class GoogleLoginService {
       throw convertGoogleError(exception);
     }
 
-    // Google에서 이메일을 제공하지 않았거나 인증되지 않았다면 로그인 거부
-    // Today-it은 이메일 인증이 완료된 Google 계정만 허용
-    if (identity.email() == null || identity.email().isBlank() || !identity.emailVerified()) {
-      throw new BusinessException(MemberErrorCode.GOOGLE_EMAIL_NOT_VERIFIED);
+    // Google 인증 결과에서 사용자 고유 ID 확인
+    if (identity == null
+        || identity.providerUserId() == null
+        || identity.providerUserId().isBlank()
+        || identity.providerUserId().length() > 255) {
+      throw new BusinessException(MemberErrorCode.GOOGLE_AUTHENTICATION_FAILED);
     }
 
     // Google 계정 고유 ID(sub)를 기준으로 기존 회원 조회

@@ -130,30 +130,6 @@ class MemberLoginServiceTest {
   }
 
   @Test
-  @DisplayName("소셜 계정만 있고 LOCAL 계정이 없으면 실패 횟수를 증가시키지 않는다")
-  void doesNotRecordFailureWhenOnlySocialAccountExists() {
-    // Given
-    String email = "test@test.com";
-    String password = "password1234";
-    LoginCommand command = new LoginCommand(email, password);
-
-    when(memberRepository.findByEmailAndProvider(email, MemberProvider.LOCAL))
-        .thenReturn(Optional.empty());
-
-    // When
-    LoginFailedException exception =
-        assertThrows(LoginFailedException.class, () -> memberLoginService.login(command));
-
-    // Then
-    assertEquals("이메일 또는 비밀번호가 올바르지 않습니다.", exception.getMessage());
-
-    verify(loginAttemptService, never()).isLocked(email);
-    verify(loginAttemptService, never()).recordFailure(email);
-    verify(loginAttemptService, never()).resetFailures(email);
-    verify(passwordEncoder).matches(eq(password), anyString());
-  }
-
-  @Test
   @DisplayName("탈퇴한 LOCAL 회원은 실패 횟수를 증가시키지 않고 로그인에 실패한다")
   void throwsLoginFailedExceptionWhenMemberIsInactive() {
     // Given

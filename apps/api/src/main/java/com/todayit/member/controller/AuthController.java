@@ -6,6 +6,7 @@ import com.todayit.member.controller.docs.AuthApiDocs;
 import com.todayit.member.dto.request.EmailVerificationConfirmRequest;
 import com.todayit.member.dto.request.EmailVerificationRequest;
 import com.todayit.member.dto.request.GoogleLoginRequest;
+import com.todayit.member.dto.request.KakaoLoginRequest;
 import com.todayit.member.dto.request.LoginRequest;
 import com.todayit.member.dto.request.LogoutRequest;
 import com.todayit.member.dto.request.SignupRequest;
@@ -14,6 +15,7 @@ import com.todayit.member.dto.response.EmailAvailabilityResponse;
 import com.todayit.member.dto.response.EmailVerificationConfirmResponse;
 import com.todayit.member.dto.response.EmailVerificationResponse;
 import com.todayit.member.dto.response.GoogleLoginResponse;
+import com.todayit.member.dto.response.KakaoLoginResponse;
 import com.todayit.member.dto.response.LoginResponse;
 import com.todayit.member.dto.response.SignupResponse;
 import com.todayit.member.dto.response.TokenRefreshResponse;
@@ -21,6 +23,7 @@ import com.todayit.member.entity.Member;
 import com.todayit.member.exception.InvalidEmailVerificationCodeException;
 import com.todayit.member.service.EmailVerificationService;
 import com.todayit.member.service.GoogleLoginService;
+import com.todayit.member.service.KakaoLoginService;
 import com.todayit.member.service.LoginFacade;
 import com.todayit.member.service.LogoutService;
 import com.todayit.member.service.SignupFacade;
@@ -28,6 +31,7 @@ import com.todayit.member.service.SignupService;
 import com.todayit.member.service.TokenRefreshService;
 import com.todayit.member.service.model.EmailVerificationConfirmResult;
 import com.todayit.member.service.model.GoogleLoginResult;
+import com.todayit.member.service.model.KakaoLoginResult;
 import com.todayit.member.service.model.LoginResult;
 import com.todayit.member.service.model.TokenRefreshResult;
 import com.todayit.member.util.EmailNormalizer;
@@ -52,6 +56,7 @@ public class AuthController implements AuthApiDocs {
   private final EmailVerificationService emailVerificationService;
   private final TokenRefreshService tokenRefreshService;
   private final GoogleLoginService googleLoginService;
+  private final KakaoLoginService kakaoLoginService;
   private final SignupFacade signupFacade;
 
   /**
@@ -63,7 +68,8 @@ public class AuthController implements AuthApiDocs {
    * @param emailVerificationService 이메일 인증 처리 Service
    * @param tokenRefreshService 토큰 갱신 처리 Service
    * @param googleLoginService Google 로그인 처리 Service
-   * @param signupFacade LOCAL·GOOGLE 통합 회원가입 Facade
+   * @param kakaoLoginService Kakao 로그인 처리 Service
+   * @param signupFacade LOCAL·GOOGLE·KAKAO 통합 회원가입 Facade
    */
   public AuthController(
       LoginFacade loginFacade,
@@ -72,6 +78,7 @@ public class AuthController implements AuthApiDocs {
       EmailVerificationService emailVerificationService,
       TokenRefreshService tokenRefreshService,
       GoogleLoginService googleLoginService,
+      KakaoLoginService kakaoLoginService,
       SignupFacade signupFacade) {
     this.loginFacade = loginFacade;
     this.logoutService = logoutService;
@@ -79,6 +86,7 @@ public class AuthController implements AuthApiDocs {
     this.emailVerificationService = emailVerificationService;
     this.tokenRefreshService = tokenRefreshService;
     this.googleLoginService = googleLoginService;
+    this.kakaoLoginService = kakaoLoginService;
     this.signupFacade = signupFacade;
   }
 
@@ -121,6 +129,28 @@ public class AuthController implements AuthApiDocs {
 
     // 신규 회원 여부에 맞게 응답 필드를 구성하고 공통 성공 형식으로 반환
     return ResponseEntity.ok(CommonResponse.success(GoogleLoginResponse.from(result)));
+  }
+
+  /**
+   * Kakao 인가 코드를 검증하고 회원 상태에 맞는 인증 결과를 반환합니다.
+   *
+   * <p>기존 회원은 Today-it 로그인 토큰을 발급하고, 신규 회원은 기본 프로필 등록에 필요한 임시 가입 토큰을 발급합니다.
+   *
+   * @param request Kakao 인가 코드와 Redirect URI
+   * @return 기존 회원 로그인 정보 또는 신규 회원 임시 가입 토큰
+   */
+  @PostMapping(value = "/oauth/kakao", consumes = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<CommonResponse<KakaoLoginResponse>> kakaoLogin(
+      @RequestBody KakaoLoginRequest request) {
+    // 인가 코드와 Redirect URI 필수 입력값 검증
+    request.validate();
+
+    // Kakao 인증 및 기존 회원 조회
+    KakaoLoginResult result =
+        kakaoLoginService.login(request.authorizationCode(), request.redirectUri());
+
+    // 기존 회원 또는 신규 회원에 맞는 응답 반환
+    return ResponseEntity.ok(CommonResponse.success(KakaoLoginResponse.from(result)));
   }
 
   /**
@@ -175,18 +205,17 @@ public class AuthController implements AuthApiDocs {
   }
 
   /**
-   * LOCAL 또는 GOOGLE 회원가입을 처리합니다.
+   * LOCAL, GOOGLE 또는 KAKAO 회원가입을 처리합니다.
    *
    * @param request 회원가입 요청
    * @return 생성된 회원 정보
    */
   @PostMapping(value = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<CommonResponse<SignupResponse>> signup(@RequestBody SignupRequest request) {
-
     // 회원가입 필수 입력값 확인
     request.validate();
 
-    // LOCAL 또는 GOOGLE 회원가입 방식에 따라 처리
+    // LOCAL, GOOGLE 또는 KAKAO 회원가입 방식에 따라 처리
     Member member = signupFacade.signup(request.toCommand());
 
     // 회원가입 성공 응답 반환

@@ -6,6 +6,7 @@ import com.todayit.common.response.ErrorResponse;
 import com.todayit.member.dto.request.EmailVerificationConfirmRequest;
 import com.todayit.member.dto.request.EmailVerificationRequest;
 import com.todayit.member.dto.request.GoogleLoginRequest;
+import com.todayit.member.dto.request.KakaoLoginRequest;
 import com.todayit.member.dto.request.LoginRequest;
 import com.todayit.member.dto.request.LogoutRequest;
 import com.todayit.member.dto.request.SignupRequest;
@@ -14,6 +15,7 @@ import com.todayit.member.dto.response.EmailAvailabilityResponse;
 import com.todayit.member.dto.response.EmailVerificationConfirmResponse;
 import com.todayit.member.dto.response.EmailVerificationResponse;
 import com.todayit.member.dto.response.GoogleLoginResponse;
+import com.todayit.member.dto.response.KakaoLoginResponse;
 import com.todayit.member.dto.response.LoginResponse;
 import com.todayit.member.dto.response.SignupResponse;
 import com.todayit.member.dto.response.TokenRefreshResponse;
@@ -31,7 +33,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 
 /** 로그인, 회원가입, 이메일 인증 및 토큰 관리 API 명세입니다. */
-@Tag(name = "인증", description = "로컬·Google 로그인, 회원가입, 이메일 인증 및 토큰 관리 API")
+@Tag(name = "인증", description = "로컬·Google·Kakao 로그인, 회원가입, 이메일 인증 및 토큰 관리 API")
 public interface AuthApiDocs {
   /**
    * 이메일과 비밀번호로 로그인합니다.
@@ -155,7 +157,7 @@ public interface AuthApiDocs {
                                           """))),
     @ApiResponse(
         responseCode = "401",
-        description = "Google 인증 실패 또는 이메일 미인증",
+        description = "Google 인증 실패",
         content =
             @Content(
                 mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -169,16 +171,6 @@ public interface AuthApiDocs {
                                                     "success": false,
                                                     "code": "GOOGLE_AUTHENTICATION_FAILED",
                                                     "message": "Google 인증에 실패했습니다."
-                                                  }
-                                                  """),
-                  @ExampleObject(
-                      name = "Google 이메일 미인증",
-                      value =
-                          """
-                                                  {
-                                                    "success": false,
-                                                    "code": "GOOGLE_EMAIL_NOT_VERIFIED",
-                                                    "message": "인증된 Google 이메일이 필요합니다."
                                                   }
                                                   """)
                 })),
@@ -201,6 +193,115 @@ public interface AuthApiDocs {
                                             """)))
   })
   ResponseEntity<CommonResponse<GoogleLoginResponse>> googleLogin(GoogleLoginRequest request);
+
+  /**
+   * Kakao 인가 코드로 로그인하거나 신규 회원가입을 준비합니다.
+   *
+   * @param request Kakao 인가 코드와 Redirect URI
+   * @return 기존 회원의 로그인 토큰 또는 신규 회원 임시 가입 토큰
+   */
+  @Operation(
+      summary = "Kakao 로그인",
+      description =
+          "Kakao Authorization Code로 Access Token을 발급받고 사용자 정보를 조회합니다. "
+              + "가입된 Kakao 회원은 Access/Refresh Token을 발급받으며, "
+              + "신규 사용자는 30분 유효한 signupToken을 발급받습니다. "
+              + "이메일이 없는 Kakao 계정도 가입할 수 있습니다. "
+              + "같은 이메일의 LOCAL 또는 GOOGLE 계정과 자동 연결하지 않습니다.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "기존 회원 로그인 또는 신규 회원 인증 성공",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                examples = {
+                  @ExampleObject(
+                      name = "기존 Kakao 회원",
+                      value =
+                          """
+                                                    {
+                                                      "success": true,
+                                                      "data": {
+                                                        "isNewMember": false,
+                                                        "accessToken": "eyJ...",
+                                                        "refreshToken": "example-refresh-token",
+                                                        "expiresIn": 1800,
+                                                        "member": {
+                                                          "memberId": "123e4567-e89b-12d3-a456-426614174000",
+                                                          "nickname": "오늘이",
+                                                          "coupleConnected": false,
+                                                          "roles": ["USER"]
+                                                        }
+                                                      }
+                                                    }
+                                                    """),
+                  @ExampleObject(
+                      name = "신규 Kakao 사용자",
+                      value =
+                          """
+                                                    {
+                                                      "success": true,
+                                                      "data": {
+                                                        "isNewMember": true,
+                                                        "signupToken": "example-signup-token"
+                                                      }
+                                                    }
+                                                    """)
+                })),
+    @ApiResponse(
+        responseCode = "400",
+        description = "Kakao 인가 코드 또는 Redirect URI 누락",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = ErrorResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                                            {
+                                              "success": false,
+                                              "code": "INVALID_REQUEST",
+                                              "message": "Kakao 인가 코드는 필수입니다."
+                                            }
+                                            """))),
+    @ApiResponse(
+        responseCode = "401",
+        description = "Kakao 인증 실패",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = ErrorResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                                            {
+                                              "success": false,
+                                              "code": "KAKAO_AUTHENTICATION_FAILED",
+                                              "message": "Kakao 인증에 실패했습니다."
+                                            }
+                                            """))),
+    @ApiResponse(
+        responseCode = "500",
+        description = "Kakao 인증 서버 통신 장애",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = ErrorResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                                            {
+                                              "success": false,
+                                              "code": "KAKAO_AUTH_SERVER_ERROR",
+                                              "message": "Kakao 인증 서버에 연결할 수 없습니다."
+                                            }
+                                            """)))
+  })
+  ResponseEntity<CommonResponse<KakaoLoginResponse>> kakaoLogin(KakaoLoginRequest request);
 
   /**
    * 현재 기기의 로그인 세션을 종료합니다.
@@ -273,16 +374,17 @@ public interface AuthApiDocs {
   ResponseEntity<CommonResponse<EmailAvailabilityResponse>> checkEmail(String email);
 
   /**
-   * 이메일 인증을 마친 회원을 JSON 요청으로 가입시킵니다.
+   * LOCAL·GOOGLE·KAKAO 회원가입을 처리합니다.
    *
    * @param request 회원가입 요청
    * @return 생성된 회원 정보
    */
   @Operation(
-      summary = "회원가입 (LOCAL / GOOGLE)",
+      summary = "회원가입 (LOCAL / GOOGLE / KAKAO)",
       description =
           "LOCAL은 이메일 인증 토큰과 비밀번호를 사용합니다. "
-              + "GOOGLE은 Google 로그인 API에서 발급한 signupToken을 사용합니다. "
+              + "GOOGLE과 KAKAO는 각 소셜 로그인 API에서 발급한 signupToken을 사용합니다. "
+              + "GOOGLE과 KAKAO는 이메일을 저장하지 않고 제공자의 고유 ID로 회원을 식별합니다. "
               + "필수 약관은 TOS, ACCOUNT_PRIVACY이며 동의값은 true여야 합니다. "
               + "PREFERENCE, PROFILE_IMAGE는 선택 약관입니다. "
               + "프로필 이미지는 가입 후 별도 API에서 등록합니다.",
@@ -328,7 +430,23 @@ public interface AuthApiDocs {
                                                       "PROFILE_IMAGE": false
                                                     }
                                                   }
-                                                  """)
+                                                  """),
+                        @ExampleObject(
+                            name = "KAKAO 회원가입",
+                            value =
+                                """
+                                              {
+                                                "provider": "KAKAO",
+                                                "signupToken": "example-kakao-signup-token",
+                                                "nickname": "오늘이",
+                                                "agreements": {
+                                                  "TOS": true,
+                                                  "ACCOUNT_PRIVACY": true,
+                                                  "PREFERENCE": false,
+                                                  "PROFILE_IMAGE": false
+                                                }
+                                              }
+                                              """)
                       })))
   @ApiResponses({
     @ApiResponse(
@@ -337,24 +455,63 @@ public interface AuthApiDocs {
         content =
             @Content(
                 mediaType = MediaType.APPLICATION_JSON_VALUE,
-                examples =
-                    @ExampleObject(
-                        value =
-                            "{\"success\":true,\"data\":{\"memberId\":\"123e4567-e89b-12d3-a456-426614174000\",\"email\":\"user@example.com\",\"nickname\":\"유저\",\"coupleConnected\":false,\"createdAt\":\"2026-10-11T09:00:00\"}}"))),
+                examples = {
+                  @ExampleObject(
+                      name = "LOCAL 회원가입 성공",
+                      value =
+                          """
+                                        {
+                                          "success": true,
+                                          "data": {
+                                            "memberId": "123e4567-e89b-12d3-a456-426614174000",
+                                            "email": "user@example.com",
+                                            "nickname": "유저",
+                                            "coupleConnected": false,
+                                            "createdAt": "2026-10-11T09:00:00"
+                                          }
+                                        }
+                                        """),
+                  @ExampleObject(
+                      name = "GOOGLE·KAKAO 회원가입 성공",
+                      value =
+                          """
+                                        {
+                                          "success": true,
+                                          "data": {
+                                            "memberId": "123e4567-e89b-12d3-a456-426614174000",
+                                            "email": null,
+                                            "nickname": "오늘이",
+                                            "coupleConnected": false,
+                                            "createdAt": "2026-10-11T09:00:00"
+                                          }
+                                        }
+                                        """)
+                })),
     @ApiResponse(
         responseCode = "400",
-        description = "필수 입력, 약관 동의, 이메일 인증 또는 Google 가입 토큰 오류",
+        description = "필수 입력, 약관 동의, 이메일 인증 또는 소셜 가입 토큰 오류",
         content =
             @Content(
                 mediaType = MediaType.APPLICATION_JSON_VALUE,
                 schema = @Schema(implementation = ErrorResponse.class),
-                examples =
-                    @ExampleObject(
-                        value =
-                            "{\"success\":false,\"code\":\"EMAIL_VERIFICATION_TOKEN_INVALID\",\"message\":\"이메일 인증 정보가 유효하지 않습니다.\"}"))),
+                examples = {
+                  @ExampleObject(
+                      value =
+                          "{\"success\":false,\"code\":\"EMAIL_VERIFICATION_TOKEN_INVALID\",\"message\":\"이메일 인증 정보가 유효하지 않습니다.\"}"),
+                  @ExampleObject(
+                      name = "Kakao 가입 토큰 오류",
+                      value =
+                          """
+                                        {
+                                          "success": false,
+                                          "code": "KAKAO_SIGNUP_TOKEN_INVALID",
+                                          "message": "Kakao 회원가입 인증 정보가 만료되었거나 유효하지 않습니다."
+                                        }
+                                        """)
+                })),
     @ApiResponse(
         responseCode = "409",
-        description = "이메일, 닉네임 또는 Google 계정 중복",
+        description = "이메일, 닉네임 또는 소셜 계정 중복",
         content =
             @Content(
                 mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -371,7 +528,17 @@ public interface AuthApiDocs {
                   @ExampleObject(
                       name = "Google 계정 중복",
                       value =
-                          "{\"success\":false,\"code\":\"GOOGLE_ACCOUNT_ALREADY_EXISTS\",\"message\":\"이미 가입된 Google 계정입니다.\"}")
+                          "{\"success\":false,\"code\":\"GOOGLE_ACCOUNT_ALREADY_EXISTS\",\"message\":\"이미 가입된 Google 계정입니다.\"}"),
+                  @ExampleObject(
+                      name = "Kakao 계정 중복",
+                      value =
+                          """
+                                        {
+                                          "success": false,
+                                          "code": "KAKAO_ACCOUNT_ALREADY_EXISTS",
+                                          "message": "이미 가입된 Kakao 계정입니다."
+                                        }
+                                        """)
                 }))
   })
   ResponseEntity<CommonResponse<SignupResponse>> signup(SignupRequest request);
