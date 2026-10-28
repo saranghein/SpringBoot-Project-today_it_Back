@@ -22,6 +22,15 @@ class ExternalPlaceRawQueryServiceTest {
   private final ExternalPlaceRawRepository repository = mock(ExternalPlaceRawRepository.class);
   private final ExternalPlaceRawQueryService service = new ExternalPlaceRawQueryService(repository);
 
+  /** 잘못된 ID 구간을 DB 접근 전에 거부하는지 확인합니다. */
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.CsvSource({"-1,10,2", "11,10,2", "0,10,0", "0,10,11"})
+  void rejectsInvalidKeysetRange(long afterId, long upperBound, int limit) {
+    assertThatThrownBy(() -> service.findSucceededAfter("TOUR_API", afterId, upperBound, limit))
+        .isInstanceOf(IllegalArgumentException.class);
+    verifyNoInteractions(repository);
+  }
+
   /** 공급원 실패 행의 첫 페이지를 제한 조회하고 불변 스냅샷으로 반환하는지 검증합니다. */
   @Test
   void selectsOnlyFailedProviderRowsWithBoundedFirstPageAndReturnsSnapshot() {

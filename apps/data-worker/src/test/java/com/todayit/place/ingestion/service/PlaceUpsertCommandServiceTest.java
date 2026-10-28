@@ -28,7 +28,7 @@ class PlaceUpsertCommandServiceTest {
   private final PlaceRegionQueryService regions = mock(PlaceRegionQueryService.class);
   private final PlaceSourceRepository repository = mock(PlaceSourceRepository.class);
   private final PlaceUpsertCommandService service =
-      new PlaceUpsertCommandService(regions, repository);
+      new PlaceUpsertCommandService(regions, repository, mock(PlaceIngestionFailureService.class));
 
   /** 명시적으로 활성화하지 않으면 장소 저장 기능이 등록되지 않는지 검증합니다. */
   @Test

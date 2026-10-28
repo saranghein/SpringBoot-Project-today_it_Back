@@ -21,21 +21,26 @@ public class PlaceUpsertCommandService {
   private static final Logger LOG = LoggerFactory.getLogger(PlaceUpsertCommandService.class);
   private final PlaceRegionQueryService regionQueryService;
   private final PlaceSourceRepository repository;
+  private final PlaceIngestionFailureService failureService;
 
   /**
    * 지역 조회 서비스와 원천 장소 저장소를 주입합니다.
    *
    * @param regionQueryService 시도·시군구 코드로 실제 지역 ID를 찾는 조회 구현
    * @param repository 원천 식별자 기반 멱등 저장 구현
+   * @param failureService 반영 성공과 함께 실패 목록을 해소할 서비스
    */
   public PlaceUpsertCommandService(
-      PlaceRegionQueryService regionQueryService, PlaceSourceRepository repository) {
+      PlaceRegionQueryService regionQueryService,
+      PlaceSourceRepository repository,
+      PlaceIngestionFailureService failureService) {
     this.regionQueryService = regionQueryService;
     this.repository = repository;
+    this.failureService = failureService;
   }
 
   /**
-   * 정상 정제 결과의 장소·지역 연결·이미지 URL을 함께 반영합니다. 외부 API와 이미지 파일은 요청하지 않습니다.
+   * 정상 정제 결과의 장소·지역 연결·이미지 URL을 반영하고 해당 원본의 적재 실패 기록을 같은 트랜잭션에서 제거합니다. 외부 API와 이미지 파일은 요청하지 않습니다.
    *
    * @param result TourAPI 정제 결과
    * @return 반영 또는 보류 결과
@@ -63,6 +68,7 @@ public class PlaceUpsertCommandService {
     if (placeId <= 0) {
       throw new IllegalStateException("장소 저장 구현이 유효하지 않은 ID를 반환했습니다.");
     }
+    failureService.clearFailure(result.rawId());
     LOG.debug("PLACE_UPSERT_STAGED 장소 저장 처리 완료 공급원=TOUR_API 커밋 대기");
     return new PlaceUpsertResult(result.sourceId(), Status.APPLIED, placeId);
   }

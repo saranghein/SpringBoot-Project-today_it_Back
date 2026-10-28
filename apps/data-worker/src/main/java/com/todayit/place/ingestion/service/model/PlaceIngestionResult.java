@@ -1,7 +1,7 @@
 package com.todayit.place.ingestion.service.model;
 
 /**
- * 성공 원본 한 묶음의 적재 결과입니다. 건수는 서로 중복되지 않으며 합계는 total입니다.
+ * 표본 적재·전체 적재·실패 재적재의 결과입니다. 각 처리 결과의 건수는 중복되지 않으며 합계는 total입니다.
  *
  * @param total 이번 실행에서 조회·처리한 원본 수
  * @param stored 커밋까지 성공한 장소 수

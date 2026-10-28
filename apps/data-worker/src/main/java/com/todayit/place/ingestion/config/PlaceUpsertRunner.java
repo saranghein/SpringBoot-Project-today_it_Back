@@ -22,7 +22,7 @@ public class PlaceUpsertRunner implements ApplicationRunner {
    *
    * @param ingestionService 장소별 적재 조정 서비스
    * @param properties 저장 기능·실행·건수 설정
-   * @param collectionEnabled 기존 수집/정제 Runner 활성화 여부
+   * @param collectionEnabled 수집·재수집·정제 Runner 활성화 여부
    * @throws IllegalStateException 저장 기능이 비활성이거나 다른 Runner를 함께 켰을 때
    */
   public PlaceUpsertRunner(
@@ -41,7 +41,12 @@ public class PlaceUpsertRunner implements ApplicationRunner {
 
   @Override
   public void run(ApplicationArguments args) {
-    var result = ingestionService.ingestTourApi(properties.limit());
+    var result =
+        switch (properties.mode()) {
+          case SAMPLE -> ingestionService.ingestTourApi(properties.limit());
+          case FULL -> ingestionService.ingestAllTourApi(properties.limit());
+          case RETRY_FAILED -> ingestionService.retryFailedTourApi(properties.limit());
+        };
     if (result.failed() > 0) {
       throw new IllegalStateException(
           "장소 적재 일부 실패: stored=" + result.stored() + ", failed=" + result.failed());

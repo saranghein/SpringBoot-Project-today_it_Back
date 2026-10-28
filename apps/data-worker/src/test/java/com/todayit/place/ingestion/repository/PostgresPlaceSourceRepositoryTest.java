@@ -68,6 +68,10 @@ class PostgresPlaceSourceRepositoryTest {
   @Autowired private PlaceIngestionService ingestionService;
   @Autowired private ExternalPlaceRawCommandService rawStore;
   @Autowired private PlatformTransactionManager transactionManager;
+
+  @Autowired
+  private com.todayit.place.ingestion.service.PlaceIngestionFailureService failureService;
+
   private int regionId;
 
   /**
@@ -390,6 +394,138 @@ class PostgresPlaceSourceRepositoryTest {
     assertThat(result.status()).isEqualTo(PlaceUpsertResult.Status.APPLIED);
     assertThat(count("place")).isEqualTo(1);
     assertThat(count("place_image")).isZero();
+  }
+
+  /** 다른 시도의 같은 시군구 코드도 정확한 지역에 연결하고 음식점 분류로 저장하는지 확인합니다. */
+  @Test
+  void differentRegionAndContentTypeReuseExistingNormalizationAndStorage() {
+    int busanRegionId =
+        jdbc.queryForObject(
+            "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES ('26', '110', '부산광역시', '중구') RETURNING region_id",
+            Integer.class);
+    when(regions.findRegionId("26", "110")).thenReturn(Optional.of(busanRegionId));
+    successfulRaw("busan-restaurant", "FD010100", "110");
+    jdbc.update(
+        "UPDATE external_place_raw SET payload = jsonb_set(jsonb_set(payload, '{list,lDongRegnCd}', '\"26\"'::jsonb), '{list,contenttypeid}', '\"39\"'::jsonb) WHERE source_id = 'busan-restaurant'");
+
+    assertThat(ingestionService.ingestAllTourApi(10))
+        .isEqualTo(new PlaceIngestionResult(1, 1, 0, 0, 0, 0));
+
+    assertThat(jdbc.queryForObject("SELECT region_id FROM region_place", Integer.class))
+        .isEqualTo(busanRegionId);
+    assertThat(jdbc.queryForObject("SELECT category FROM place", String.class))
+        .isEqualTo("RESTAURANT");
+  }
+
+  /** 저장 롤백 뒤 실패 기록은 남고 재실패 횟수가 증가하며 복구 성공 시 같은 트랜잭션으로 해소되는지 확인합니다. */
+  @Test
+  void recordsFailureAfterRollbackCountsRepeatedFailureAndClearsOnSuccessfulRetry() {
+    successfulRaw("001", "VE030100", "110");
+    when(regions.findRegionId("11", "110")).thenReturn(Optional.of(regionId + 100000));
+    var before = jdbc.queryForList("SELECT * FROM external_place_raw");
+
+    assertThat(ingestionService.ingestAllTourApi(10).failed()).isEqualTo(1);
+    var initial = jdbc.queryForMap("SELECT * FROM place_ingestion_failure");
+    assertThat(initial.get("error_code")).isEqualTo("DATA_INTEGRITY");
+    assertThat(initial.get("failure_count")).isEqualTo(1);
+    assertThat(count("place")).isZero();
+    assertThat(count("place_source")).isZero();
+
+    assertThat(ingestionService.retryFailedTourApi(10).failed()).isEqualTo(1);
+    var repeated = jdbc.queryForMap("SELECT * FROM place_ingestion_failure");
+    assertThat(repeated.get("place_ingestion_failure_id"))
+        .isEqualTo(initial.get("place_ingestion_failure_id"));
+    assertThat(repeated.get("failure_count")).isEqualTo(2);
+    assertThat(repeated.get("created_at")).isEqualTo(initial.get("created_at"));
+
+    when(regions.findRegionId("11", "110")).thenReturn(Optional.of(regionId));
+    assertThat(ingestionService.retryFailedTourApi(10))
+        .isEqualTo(new PlaceIngestionResult(1, 1, 0, 0, 0, 0));
+    assertThat(count("place_ingestion_failure")).isZero();
+    assertThat(count("place")).isEqualTo(1);
+    assertThat(jdbc.queryForList("SELECT * FROM external_place_raw")).isEqualTo(before);
+    assertThat(ingestionService.retryFailedTourApi(10).total()).isZero();
+  }
+
+  /** 성공 시 목록이 삭제돼도 뒤의 실패까지 처리하고 실패 목록 밖의 새 원본은 적재하지 않는지 확인합니다. */
+  @Test
+  void retryUsesFailureKeysetAcrossDeletionsAndIgnoresUnfailedRaw() {
+    for (int index = 1; index <= 5; index++) {
+      successfulRaw(Integer.toString(index), "VE030100", "110");
+    }
+    when(regions.findRegionId("11", "110")).thenReturn(Optional.of(regionId + 100000));
+    assertThat(ingestionService.ingestAllTourApi(2).failed()).isEqualTo(5);
+    successfulRaw("not-failed", "VE030100", "110");
+    when(regions.findRegionId("11", "110")).thenReturn(Optional.of(regionId));
+
+    assertThat(ingestionService.retryFailedTourApi(2))
+        .isEqualTo(new PlaceIngestionResult(5, 5, 0, 0, 0, 0));
+
+    assertThat(count("place")).isEqualTo(5);
+    assertThat(count("place_ingestion_failure")).isZero();
+    assertThat(jdbc.queryForList("SELECT source_id FROM place_source", String.class))
+        .doesNotContain("not-failed");
+  }
+
+  /** 일반 FULL 성공도 실패를 해소하고 검수·지역 보류는 새 저장 실패로 기록하지 않는지 확인합니다. */
+  @Test
+  void regularIngestionAlsoResolvesPendingFailureButDeferralsDoNotBecomeStorageFailures() {
+    successfulRaw("001", "VE030100", "110");
+    when(regions.findRegionId("11", "110")).thenReturn(Optional.of(regionId + 100000));
+    ingestionService.ingestAllTourApi(10);
+    when(regions.findRegionId("11", "110")).thenReturn(Optional.empty());
+    assertThat(ingestionService.retryFailedTourApi(10).regionMissing()).isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject("SELECT failure_count FROM place_ingestion_failure", Integer.class))
+        .isEqualTo(1);
+    when(regions.findRegionId("11", "110")).thenReturn(Optional.of(regionId));
+    successfulRaw("review", "EX050800", "110");
+
+    assertThat(ingestionService.ingestAllTourApi(10))
+        .isEqualTo(new PlaceIngestionResult(2, 1, 0, 1, 0, 0));
+    assertThat(count("place_ingestion_failure")).isZero();
+  }
+
+  /** 수집 FAILED 원본은 오래된 payload로 재적재하지 않으며 원본 삭제 시 실패 목록도 정리되는지 확인합니다. */
+  @Test
+  void retrySkipsCollectionFailedRawAndRawDeletionCascadesFailure() {
+    successfulRaw("001", "VE030100", "110");
+    long rawId =
+        jdbc.queryForObject("SELECT external_place_raw_id FROM external_place_raw", Long.class);
+    failureService.recordFailure(
+        rawId, com.todayit.place.ingestion.service.PlaceIngestionFailureService.Code.DATA_ACCESS);
+    rawStore.saveFailure("TOUR_API", "001", null, Reason.TRANSIENT);
+
+    assertThat(ingestionService.retryFailedTourApi(10).total()).isZero();
+    assertThat(count("place_ingestion_failure")).isEqualTo(1);
+    jdbc.update("DELETE FROM external_place_raw WHERE external_place_raw_id = ?", rawId);
+    assertThat(count("place_ingestion_failure")).isZero();
+  }
+
+  /** 장소 저장이 롤백되면 실패 목록 제거도 함께 롤백되는지 확인합니다. */
+  @Test
+  void failureClearRollsBackWithPlaceTransaction() {
+    successfulRaw("001", "VE030100", "110");
+    long rawId =
+        jdbc.queryForObject("SELECT external_place_raw_id FROM external_place_raw", Long.class);
+    failureService.recordFailure(
+        rawId, com.todayit.place.ingestion.service.PlaceIngestionFailureService.Code.DATA_ACCESS);
+    var normal = normalized("001", "공원", null);
+    var actual =
+        new PlaceNormalizationResult(
+            rawId, normal.sourceId(), normal.status(), normal.reason(), normal.place());
+    var transaction = new TransactionTemplate(transactionManager);
+
+    transaction.executeWithoutResult(
+        status -> {
+          service.upsert(actual);
+          assertThat(count("place_ingestion_failure")).isZero();
+          status.setRollbackOnly();
+        });
+
+    assertThat(count("place")).isZero();
+    assertThat(count("place_image")).isZero();
+    assertThat(count("place_ingestion_failure")).isEqualTo(1);
   }
 
   /**

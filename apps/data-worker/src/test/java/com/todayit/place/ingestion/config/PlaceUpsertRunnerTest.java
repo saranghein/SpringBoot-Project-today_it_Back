@@ -41,6 +41,7 @@ class PlaceUpsertRunnerTest {
               assertThat(properties.enabled()).isTrue();
               assertThat(properties.runEnabled()).isTrue();
               assertThat(properties.limit()).isEqualTo(10);
+              assertThat(properties.mode()).isEqualTo(PlaceUpsertProperties.Mode.SAMPLE);
               verifyNoInteractions(service);
             });
   }
@@ -77,7 +78,11 @@ class PlaceUpsertRunnerTest {
   void writesOnlyWhenRunnerIsInvokedAndFailsAfterPartialStorageFailure() {
     var service = mock(PlaceIngestionService.class);
     when(service.ingestTourApi(10)).thenReturn(new PlaceIngestionResult(2, 1, 0, 0, 0, 1));
-    var runner = new PlaceUpsertRunner(service, new PlaceUpsertProperties(true, true, 10), false);
+    var runner =
+        new PlaceUpsertRunner(
+            service,
+            new PlaceUpsertProperties(true, true, 10, PlaceUpsertProperties.Mode.SAMPLE),
+            false);
 
     assertThatThrownBy(() -> runner.run(new DefaultApplicationArguments()))
         .isInstanceOf(IllegalStateException.class)
@@ -92,9 +97,58 @@ class PlaceUpsertRunnerTest {
     when(service.ingestTourApi(10))
         .thenReturn(new PlaceIngestionResult(0, 0, 0, 0, 0, 0))
         .thenReturn(new PlaceIngestionResult(3, 0, 1, 1, 1, 0));
-    var runner = new PlaceUpsertRunner(service, new PlaceUpsertProperties(true, true, 10), false);
+    var runner =
+        new PlaceUpsertRunner(
+            service,
+            new PlaceUpsertProperties(true, true, 10, PlaceUpsertProperties.Mode.SAMPLE),
+            false);
 
     runner.run(new DefaultApplicationArguments());
     runner.run(new DefaultApplicationArguments());
+  }
+
+  /** FULL로 전체 순회를 선택하고 일부 실패가 있으면 실행을 실패시키는지 확인합니다. */
+  @Test
+  void fullModeBindsAndReportsPartialFailureAfterCompleteTraversal() {
+    var service = mock(PlaceIngestionService.class);
+    when(service.ingestAllTourApi(2)).thenReturn(new PlaceIngestionResult(20, 18, 0, 1, 0, 1));
+    new ApplicationContextRunner()
+        .withUserConfiguration(PlaceUpsertRunner.class)
+        .withBean(PlaceIngestionService.class, () -> service)
+        .withPropertyValues(
+            "todayit.place.upsert.enabled=true",
+            "todayit.place.upsert.run-enabled=true",
+            "todayit.place.upsert.mode=FULL",
+            "todayit.place.upsert.limit=2")
+        .run(
+            context -> {
+              assertThat(context).hasSingleBean(PlaceUpsertRunner.class);
+              assertThatThrownBy(
+                      () ->
+                          context
+                              .getBean(PlaceUpsertRunner.class)
+                              .run(new DefaultApplicationArguments()))
+                  .isInstanceOf(IllegalStateException.class)
+                  .hasMessageContaining("stored=18, failed=1");
+            });
+    verify(service).ingestAllTourApi(2);
+    org.mockito.Mockito.verifyNoMoreInteractions(service);
+  }
+
+  /** 실패 재처리 모드가 전체 적재 대신 실패 목록을 사용하며 대상이 없으면 정상 종료하는지 확인합니다. */
+  @Test
+  void retryModeUsesPendingFailuresOnlyAndEmptySetIsNormal() {
+    var service = mock(PlaceIngestionService.class);
+    when(service.retryFailedTourApi(10)).thenReturn(new PlaceIngestionResult(0, 0, 0, 0, 0, 0));
+    var runner =
+        new PlaceUpsertRunner(
+            service,
+            new PlaceUpsertProperties(true, true, 10, PlaceUpsertProperties.Mode.RETRY_FAILED),
+            false);
+
+    runner.run(new DefaultApplicationArguments());
+
+    verify(service).retryFailedTourApi(10);
+    org.mockito.Mockito.verifyNoMoreInteractions(service);
   }
 }

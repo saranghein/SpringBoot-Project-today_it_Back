@@ -12,16 +12,22 @@ import com.todayit.place.client.external.PlaceDataSource;
 import com.todayit.place.client.external.PlaceDataSource.Component;
 import com.todayit.place.client.external.PlaceDataSource.SourceComponent;
 import com.todayit.place.client.external.PlaceDataSource.SourceComponentRequest;
+import com.todayit.place.client.external.PlaceDataSource.SourceItem;
 import com.todayit.place.client.external.PlaceDataSource.SourceKey;
+import com.todayit.place.client.external.PlaceDataSource.SourcePage;
+import com.todayit.place.client.external.PlaceDataSource.SourcePageRequest;
 import com.todayit.place.client.external.PlaceDataSourceRegistry;
 import com.todayit.place.client.external.PlaceSourceException;
 import com.todayit.place.client.external.PlaceSourceException.Reason;
 import com.todayit.place.raw.service.ExternalPlaceRawCommandService;
 import com.todayit.place.raw.service.ExternalPlaceRawQueryService;
 import com.todayit.place.raw.service.PlaceNormalizationQueryService;
+import com.todayit.place.raw.service.TourApiCollectionPlanService;
 import com.todayit.place.raw.service.TourApiRawCollectionService;
+import com.todayit.place.raw.service.command.TourApiCollectionScope;
 import com.todayit.place.raw.service.model.PlaceNormalizationResult.Status;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
@@ -176,6 +182,56 @@ class ExternalPlaceRawRepositoryTest {
     CompletableFuture.allOf(writes).join();
 
     assertThat(repository.count()).isEqualTo(1);
+  }
+
+  /** 겹치는 범위와 다른 지역을 순차 수집해도 원본 ID를 유지하며 재실행하는지 PostgreSQL에서 확인합니다. */
+  @Test
+  void multiScopeCollectionPreservesIdentityAcrossOverlappingTargetsAndReruns() {
+    var source = mock(PlaceDataSource.class);
+    when(registry.get(new SourceKey("TOUR_API", "kor-service2"))).thenReturn(source);
+    when(source.fetchPage(any()))
+        .thenAnswer(
+            call -> {
+              SourcePageRequest request = call.getArgument(0);
+              String id = request.filters().get("lDongRegnCd").equals("26") ? "busan" : "seoul";
+              String payload =
+                  "{\"contentid\":\""
+                      + id
+                      + "\",\"title\":\"장소\",\"contenttypeid\":\""
+                      + request.filters().get("contentTypeId")
+                      + "\"}";
+              return new SourcePage(List.of(new SourceItem(id, payload)), "", 1, FIRST);
+            });
+    when(source.fetchComponent(any()))
+        .thenAnswer(
+            call -> {
+              SourceComponentRequest request = call.getArgument(0);
+              String payload =
+                  request.component() == Component.IMAGES
+                      ? "[]"
+                      : "[{\"contentid\":\"" + request.sourceId() + "\",\"title\":\"장소\"}]";
+              return new SourceComponent(request.sourceId(), request.component(), payload, FIRST);
+            });
+    var plan = new TourApiCollectionPlanService(collectionService);
+    var targets =
+        List.of(
+            new TourApiCollectionScope("11", "", "12"),
+            new TourApiCollectionScope("11", "110", "12"),
+            new TourApiCollectionScope("26", "110", "39"));
+
+    assertThat(plan.collect(targets, 1, true).succeeded()).isEqualTo(3);
+    var ids =
+        jdbc.queryForList(
+            "SELECT source_id, external_place_raw_id FROM external_place_raw ORDER BY source_id");
+    assertThat(plan.collect(targets, 1, true).succeeded()).isEqualTo(3);
+
+    assertThat(repository.count()).isEqualTo(2);
+    assertThat(
+            jdbc.queryForList(
+                "SELECT source_id, external_place_raw_id FROM external_place_raw ORDER BY source_id"))
+        .isEqualTo(ids);
+    assertThat(repository.findByProviderAndSourceId("TOUR_API", "busan").orElseThrow().getStatus())
+        .isEqualTo("SUCCESS");
   }
 
   /** TourAPI 실패 원본만 PK 순서와 건수 제한에 맞춰 조회하는지 검증합니다. */

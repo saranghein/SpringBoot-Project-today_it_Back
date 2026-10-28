@@ -31,8 +31,9 @@ class PlaceIngestionServiceTest {
 
   private final ExternalPlaceRawQueryService query = mock(ExternalPlaceRawQueryService.class);
   private final PlaceUpsertCommandService store = mock(PlaceUpsertCommandService.class);
+  private final PlaceIngestionFailureService failures = mock(PlaceIngestionFailureService.class);
   private final PlaceIngestionService service =
-      new PlaceIngestionService(query, new TourApiPlaceNormalizationService(), store);
+      new PlaceIngestionService(query, new TourApiPlaceNormalizationService(), store, failures);
 
   /** 커밋 성공·제외·검수·지역 보류를 각각 집계하고 건너뛴 값을 저장하지 않는지 검증합니다. */
   @Test
@@ -199,6 +200,46 @@ class PlaceIngestionServiceTest {
     verifyNoInteractions(store);
     verify(query).findSucceededUpperBound("TOUR_API");
     org.mockito.Mockito.verifyNoMoreInteractions(query);
+  }
+
+  /** 실패 기록 자체가 불가능하면 실패 대상을 잃은 채 다음 건을 진행하지 않는지 확인합니다. */
+  @Test
+  void failureRecordingErrorAbortsRatherThanSilentlyLosingRetryTarget() {
+    when(query.findSucceeded("TOUR_API", 10)).thenReturn(List.of(snapshot("001", "VE030100")));
+    when(store.upsert(any())).thenThrow(new DataIntegrityViolationException("fixture"));
+    org.mockito.Mockito.doThrow(
+            new org.springframework.dao.DataAccessResourceFailureException("fixture"))
+        .when(failures)
+        .recordFailure(1L, PlaceIngestionFailureService.Code.DATA_INTEGRITY);
+
+    assertThatThrownBy(() -> service.ingestTourApi(10))
+        .isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
+  }
+
+  /** 실패 목록의 PK를 사용해 재실패·검수 뒤에도 계속 진행하고 정상 원본 전체를 다시 읽지 않는지 확인합니다. */
+  @Test
+  void retryTraversesFailureListOnceDespitePersistentFailureAndDeferredRows() {
+    when(failures.findUpperBound("TOUR_API")).thenReturn(5L);
+    when(failures.findAfter("TOUR_API", 0, 5, 2))
+        .thenReturn(
+            List.of(
+                new com.todayit.place.ingestion.service.model.PlaceIngestionRetryTarget(
+                    1, withId(10, "VE030100")),
+                new com.todayit.place.ingestion.service.model.PlaceIngestionRetryTarget(
+                    2, withId(20, "EX050800"))));
+    when(failures.findAfter("TOUR_API", 2, 5, 2))
+        .thenReturn(
+            List.of(
+                new com.todayit.place.ingestion.service.model.PlaceIngestionRetryTarget(
+                    5, withId(30, "VE030100"))));
+    when(store.upsert(any()))
+        .thenThrow(new DataIntegrityViolationException("fixture"))
+        .thenReturn(new PlaceUpsertResult("30", Status.APPLIED, 1));
+
+    assertThat(service.retryFailedTourApi(2)).isEqualTo(new PlaceIngestionResult(3, 1, 0, 1, 0, 1));
+
+    verify(failures).recordFailure(10L, PlaceIngestionFailureService.Code.DATA_INTEGRITY);
+    verifyNoInteractions(query);
   }
 
   /** 전체 실행도 범위를 벗어난 묶음 크기를 DB 접근 전에 거부하는지 확인합니다. */

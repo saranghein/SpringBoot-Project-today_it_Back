@@ -34,6 +34,33 @@ public interface ExternalPlaceRawRepository extends JpaRepository<ExternalPlaceR
       String provider, String status, Pageable pageable);
 
   /**
+   * 조회 시점의 성공 원본 최대 PK를 반환합니다. 전체 적재 호출자가 이 값을 실행 범위의 상한으로 사용합니다.
+   *
+   * @param provider 공급원 코드
+   * @return 성공 원본의 최대 ID, 대상이 없으면 0
+   */
+  @Query(
+      "select coalesce(max(raw.id), 0) from ExternalPlaceRaw raw where raw.provider = :provider and raw.status = 'SUCCESS'")
+  long findSucceededUpperBound(@Param("provider") String provider);
+
+  /**
+   * 직전 처리 위치보다 크고 상한 이하인 성공 원본을 PK 순서로 조회합니다.
+   *
+   * @param provider 공급원 코드
+   * @param afterId 직전 묶음의 마지막 원본 ID, 최초 0
+   * @param upperBound 실행 시작 시 고정한 ID 상한
+   * @param pageable 첫 페이지와 묶음 크기
+   * @return ID 오름차순 성공 원본
+   */
+  @Query(
+      "select raw from ExternalPlaceRaw raw where raw.provider = :provider and raw.status = 'SUCCESS' and raw.id > :afterId and raw.id <= :upperBound order by raw.id")
+  List<ExternalPlaceRaw> findSucceededAfter(
+      @Param("provider") String provider,
+      @Param("afterId") long afterId,
+      @Param("upperBound") long upperBound,
+      Pageable pageable);
+
+  /**
    * 성공 원본을 교체하며 이전 실패 분류를 지웁니다.
    *
    * @param provider 공급원 코드

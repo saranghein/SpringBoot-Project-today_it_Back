@@ -129,6 +129,7 @@ class TourApiRawCollectionServiceTest {
 
     assertThat(result.attempted()).isEqualTo(1);
     assertThat(result.failed()).isEqualTo(1);
+    assertThat(result.stoppedEarly()).isTrue();
     verify(source, never())
         .fetchComponent(new SourceComponentRequest("002", Component.BASIC, Map.of()));
   }
@@ -181,7 +182,7 @@ class TourApiRawCollectionServiceTest {
     verify(store, never()).saveSuccess(anyString(), anyString(), anyString(), any());
   }
 
-  /** 목록 조회 실패 시 식별할 수 없는 가짜 실패 행을 만들지 않는지 검증합니다. */
+  /** 목록 조회 실패 시 원천 ID를 알 수 없는 실패 행을 저장하지 않는지 검증합니다. */
   @Test
   void listingFailureDoesNotCreateUnidentifiableFailureRow() {
     when(source.fetchPage(any())).thenThrow(new PlaceSourceException(Reason.TRANSIENT));
@@ -384,6 +385,38 @@ class TourApiRawCollectionServiceTest {
     verify(store).saveSuccess(eq("TOUR_API"), eq("003"), anyString(), any());
   }
 
+  /** 다른 시도의 시군구·타입 필터가 다음 페이지에서도 유지되고 소개에는 원본 관광타입을 전달하는지 확인합니다. */
+  @Test
+  void selectedScopeIsKeptAcrossPagesAndIntroductionUsesReturnedContentType() {
+    var scope = new com.todayit.place.raw.service.command.TourApiCollectionScope("26", "110", "39");
+    var first =
+        new SourceItem("001", "{\"contentid\":\"001\",\"contenttypeid\":\"39\",\"title\":\"음식점\"}");
+    var second =
+        new SourceItem("002", "{\"contentid\":\"002\",\"contenttypeid\":\"39\",\"title\":\"음식점\"}");
+    when(source.fetchPage(any()))
+        .thenReturn(
+            new SourcePage(List.of(first), "v1:2", 2, Instant.now()),
+            new SourcePage(List.of(second), "", 2, Instant.now()));
+    givenDetails();
+
+    assertThat(service.collectAll(1, scope).succeeded()).isEqualTo(2);
+
+    var requests = ArgumentCaptor.forClass(SourcePageRequest.class);
+    verify(source, org.mockito.Mockito.times(2)).fetchPage(requests.capture());
+    assertThat(requests.getAllValues())
+        .allSatisfy(request -> assertThat(request.filters()).isEqualTo(scope.filters()));
+    var details = ArgumentCaptor.forClass(SourceComponentRequest.class);
+    verify(source, org.mockito.Mockito.times(6)).fetchComponent(details.capture());
+    assertThat(
+            details.getAllValues().stream()
+                .filter(request -> request.component() == Component.INTRODUCTION))
+        .allSatisfy(request -> assertThat(request.filters()).containsEntry("contentTypeId", "39"));
+    assertThat(
+            details.getAllValues().stream()
+                .filter(request -> request.component() != Component.INTRODUCTION))
+        .allSatisfy(request -> assertThat(request.filters()).doesNotContainKey("contentTypeId"));
+  }
+
   /** 상세의 일시 오류가 있어도 다음 페이지를 수집하고 실패 원본을 남기는지 확인합니다. */
   @Test
   void fullCollectionContinuesAfterIndividualDetailFailure() {
@@ -423,13 +456,15 @@ class TourApiRawCollectionServiceTest {
         .thenReturn(new SourcePage(List.of(item("001")), "v1:2", 2, Instant.now()));
     when(source.fetchComponent(any())).thenThrow(new PlaceSourceException(reason));
 
-    assertThat(service.collectAll(1).failed()).isEqualTo(1);
+    var result = service.collectAll(1);
+    assertThat(result.failed()).isEqualTo(1);
+    assertThat(result.stoppedEarly()).isTrue();
 
     verify(source).fetchPage(any());
     verify(store).saveFailure(eq("TOUR_API"), eq("001"), anyString(), eq(reason));
   }
 
-  /** 다음 목록 조회 실패가 이미 저장한 원본을 지우거나 가짜 실패 행을 만들지 않는지 확인합니다. */
+  /** 다음 페이지 조회 실패 시 앞서 저장한 원본을 보존하고 별도의 실패 행을 저장하지 않는지 확인합니다. */
   @Test
   void nextPageFailurePropagatesAfterEarlierRawCommits() {
     when(source.fetchPage(any()))

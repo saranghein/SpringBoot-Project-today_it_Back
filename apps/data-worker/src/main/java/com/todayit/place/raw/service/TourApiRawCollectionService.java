@@ -5,13 +5,16 @@ import com.todayit.place.client.external.PlaceDataSource.Component;
 import com.todayit.place.client.external.PlaceDataSource.SourceComponentRequest;
 import com.todayit.place.client.external.PlaceDataSource.SourceItem;
 import com.todayit.place.client.external.PlaceDataSource.SourceKey;
+import com.todayit.place.client.external.PlaceDataSource.SourcePage;
 import com.todayit.place.client.external.PlaceDataSource.SourcePageRequest;
 import com.todayit.place.client.external.PlaceDataSourceRegistry;
 import com.todayit.place.client.external.PlaceSourceException;
 import com.todayit.place.client.external.PlaceSourceException.Reason;
+import com.todayit.place.raw.service.command.TourApiCollectionScope;
 import com.todayit.place.raw.service.model.RawCollectionResult;
 import com.todayit.place.raw.service.model.RawRetryTarget;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -24,14 +27,12 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-/** TourAPI 표본 수집과 실패 원본 재수집을 최대 10건씩 수행합니다. 정제나 서비스 장소 반영은 하지 않습니다. */
+/** TourAPI 선택 지역·관광타입의 표본·전체 수집과 실패 재수집을 수행합니다. 서비스 장소 반영은 하지 않습니다. */
 @Service
 public class TourApiRawCollectionService {
 
   private static final Logger LOG = LoggerFactory.getLogger(TourApiRawCollectionService.class);
   private static final SourceKey SOURCE = new SourceKey("TOUR_API", "kor-service2");
-  private static final Map<String, String> SAMPLE_FILTERS =
-      Map.of("lDongRegnCd", "11", "contentTypeId", "12");
   private final PlaceDataSourceRegistry registry;
   private final ExternalPlaceRawCommandService commandService;
   private final ExternalPlaceRawQueryService queryService;
@@ -54,7 +55,7 @@ public class TourApiRawCollectionService {
   }
 
   /**
-   * 목록과 공통·소개·이미지를 묶어 저장합니다. 인증·쿼터 실패는 기록 후 남은 외부 호출을 중단합니다.
+   * 서울 관광지의 첫 페이지와 공통·소개·이미지 상세를 묶어 저장합니다. 인증·호출 한도 오류가 발생하면 실패를 기록한 뒤 외부 호출을 중단합니다.
    *
    * @param limit 수집할 첫 페이지 크기, 1~10
    * @return 실제 시도·성공·실패 건수
@@ -63,11 +64,26 @@ public class TourApiRawCollectionService {
    */
   @Transactional(propagation = Propagation.NEVER)
   public RawCollectionResult collectSample(int limit) {
+    return collectSample(limit, TourApiCollectionScope.seoulAttractions());
+  }
+
+  /**
+   * 선택한 지역·관광타입의 첫 페이지와 상세를 수집합니다. 개별 상세 실패 후에는 다음 장소를 처리하고, 인증·호출 한도 오류가 발생하면 중단 결과를 반환합니다.
+   *
+   * @param limit 첫 페이지 크기, 1~10
+   * @param scope 검증한 수집 범위
+   * @return 실제 시도·성공·실패 건수
+   * @throws IllegalArgumentException 페이지 크기가 잘못됐을 때
+   * @throws PlaceSourceException 공급원이 꺼져 있거나 목록 조회에 실패할 때
+   */
+  @Transactional(propagation = Propagation.NEVER)
+  public RawCollectionResult collectSample(int limit, TourApiCollectionScope scope) {
     if (limit < 1 || limit > 10) {
       throw new IllegalArgumentException("표본 수집 크기는 1~10이어야 합니다.");
     }
     PlaceDataSource source = registry.get(SOURCE);
-    var page = source.fetchPage(new SourcePageRequest(Component.BASIC, "", limit, SAMPLE_FILTERS));
+    logScope(scope);
+    var page = source.fetchPage(new SourcePageRequest(Component.BASIC, "", limit, scope.filters()));
     if (page.items().size() > limit
         || page.items().stream().map(SourceItem::sourceId).distinct().count()
             != page.items().size()) {
@@ -75,6 +91,7 @@ public class TourApiRawCollectionService {
     }
     int succeeded = 0;
     int failed = 0;
+    boolean stoppedEarly = false;
     for (SourceItem item : page.items()) {
       Reason reason = collectAndSave(source, item.sourceId(), () -> item);
       if (reason == null) {
@@ -83,15 +100,146 @@ public class TourApiRawCollectionService {
         failed++;
       }
       if (shouldStop(reason)) {
+        stoppedEarly = true;
         break;
       }
     }
     LOG.info("PLACE_RAW_COLLECTION 원본 수집 완료 공급원=TOUR_API 성공={} 실패={}", succeeded, failed);
+    return new RawCollectionResult(succeeded + failed, succeeded, failed, stoppedEarly);
+  }
+
+  /**
+   * 서울 관광지의 전체 페이지와 상세를 수집합니다. 실패 처리와 페이지 진행 검증은 수집 범위를 받는 collectAll 메서드와 같습니다.
+   *
+   * @param pageSize 페이지당 항목 수, 1~10
+   * @return 전체 실행에서 실제 시도·성공·실패한 장소 수
+   * @throws IllegalArgumentException 페이지 크기가 범위를 벗어날 때
+   * @throws PlaceSourceException 공급원이 비활성이거나 목록 조회·진행 검증에 실패할 때
+   */
+  @Transactional(propagation = Propagation.NEVER)
+  public RawCollectionResult collectAll(int pageSize) {
+    return collectAll(pageSize, TourApiCollectionScope.seoulAttractions());
+  }
+
+  /**
+   * 선택 범위의 모든 페이지에 동일한 필터를 사용합니다. 개별 상세 실패 후에는 다음 장소로 진행하고, 인증·호출 한도 오류가 발생하면 중단 결과를 반환합니다. 전체 건수
+   * 변경·원천 ID 중복·cursor 반복·마지막 페이지의 누락을 감지하면 예외를 전파합니다.
+   *
+   * @param pageSize 페이지당 항목 수, 1~10
+   * @param scope 검증한 수집 범위
+   * @return 실제 시도·성공·실패 건수
+   * @throws IllegalArgumentException 페이지 크기가 잘못됐을 때
+   * @throws PlaceSourceException 공급원이 비활성이거나 목록 조회·진행 검증에 실패할 때
+   */
+  @Transactional(propagation = Propagation.NEVER)
+  public RawCollectionResult collectAll(int pageSize, TourApiCollectionScope scope) {
+    if (pageSize < 1 || pageSize > 10) {
+      throw new IllegalArgumentException("전체 수집 페이지 크기는 1~10이어야 합니다.");
+    }
+    PlaceDataSource source = registry.get(SOURCE);
+    logScope(scope);
+    var cursors = new HashSet<String>();
+    var sourceIds = new HashSet<String>();
+    String cursor = "";
+    long expectedTotal = -1;
+    int pages = 0;
+    int succeeded = 0;
+    int failed = 0;
+    try {
+      do {
+        if (!cursors.add(cursor)) {
+          throw new PlaceSourceException(Reason.INVALID_RESPONSE);
+        }
+        SourcePage page =
+            source.fetchPage(
+                new SourcePageRequest(Component.BASIC, cursor, pageSize, scope.filters()));
+        if (expectedTotal < 0) {
+          expectedTotal = page.totalCount();
+        }
+        if (page.totalCount() < 0
+            || page.totalCount() != expectedTotal
+            || page.items().size() > pageSize
+            || (!page.nextCursor().isEmpty()
+                && (page.items().isEmpty() || cursors.contains(page.nextCursor())))) {
+          throw new PlaceSourceException(Reason.INVALID_RESPONSE);
+        }
+        for (SourceItem item : page.items()) {
+          if (!sourceIds.add(item.sourceId())) {
+            throw new PlaceSourceException(Reason.INVALID_RESPONSE);
+          }
+        }
+        if (sourceIds.size() > expectedTotal) {
+          throw new PlaceSourceException(Reason.INVALID_RESPONSE);
+        }
+        pages++;
+        for (SourceItem item : page.items()) {
+          Reason reason = collectAndSave(source, item.sourceId(), () -> item);
+          if (reason == null) {
+            succeeded++;
+          } else {
+            failed++;
+          }
+          if (shouldStop(reason)) {
+            logFullCollection(pages, succeeded, failed, false);
+            return new RawCollectionResult(succeeded + failed, succeeded, failed, true);
+          }
+        }
+        LOG.info(
+            "PLACE_RAW_FULL_PAGE 전체 수집 진행 공급원=TOUR_API 페이지수={} 누적성공={} 누적실패={}",
+            pages,
+            succeeded,
+            failed);
+        cursor = page.nextCursor();
+      } while (!cursor.isEmpty());
+      if (sourceIds.size() != expectedTotal) {
+        throw new PlaceSourceException(Reason.INVALID_RESPONSE);
+      }
+    } catch (PlaceSourceException exception) {
+      LOG.warn(
+          "PLACE_RAW_FULL_ABORTED 전체 수집 중단 공급원=TOUR_API 페이지수={} 성공={} 실패={} 사유={}",
+          pages,
+          succeeded,
+          failed,
+          exception.getReason());
+      throw exception;
+    }
+    logFullCollection(pages, succeeded, failed, true);
     return new RawCollectionResult(succeeded + failed, succeeded, failed);
   }
 
   /**
-   * 저장된 TourAPI FAILED 원본만 한 번씩 재수집합니다. 목록 API는 다시 호출하지 않습니다.
+   * 실제로 마지막 페이지까지 처리했는지와 전체 수집 결과를 함께 기록합니다.
+   *
+   * @param pages 처리한 페이지 수
+   * @param succeeded 성공 장소 수
+   * @param failed 실패 장소 수
+   * @param completed 목록 끝까지 처리했는지 여부
+   */
+  private void logFullCollection(int pages, int succeeded, int failed, boolean completed) {
+    LOG.info(
+        "PLACE_RAW_FULL 전체 수집 결과 공급원=TOUR_API 페이지수={} 성공={} 실패={} 순회완료={}",
+        pages,
+        succeeded,
+        failed,
+        completed);
+  }
+
+  /**
+   * 인증 정보 없이 선택한 수집 범위를 기록합니다.
+   *
+   * @param scope 수집 범위
+   */
+  private void logScope(TourApiCollectionScope scope) {
+    LOG.info(
+        "PLACE_RAW_SCOPE 수집 범위 공급원=TOUR_API 시도={} 시군구={} 관광타입={}",
+        scope.sidoCode(),
+        scope.sigunguCode().isEmpty() ? "전체" : scope.sigunguCode(),
+        scope.contentTypeId());
+  }
+
+  /**
+   * PK가 작은 TourAPI FAILED 원본부터 최대 limit건을 한 번씩 재수집합니다. 저장된 목록을 복원해 사용하며 목록 API는 호출하지 않습니다. 복원할 수 없는
+   * 원본은 FAILED로 유지합니다.
    *
    * @param limit 실행당 최대 재수집 건수, 1~10
    * @return 실제 시도·성공·실패 건수, 대상이 없으면 모두 0
@@ -108,6 +256,7 @@ public class TourApiRawCollectionService {
     PlaceDataSource source = registry.get(SOURCE);
     int succeeded = 0;
     int failed = 0;
+    boolean stoppedEarly = false;
     for (RawRetryTarget target : targets) {
       Reason reason = collectAndSave(source, target.sourceId(), () -> restoreList(target));
       if (reason == null) {
@@ -116,6 +265,7 @@ public class TourApiRawCollectionService {
         failed++;
       }
       if (shouldStop(reason)) {
+        stoppedEarly = true;
         break;
       }
     }
@@ -124,7 +274,7 @@ public class TourApiRawCollectionService {
         succeeded + failed,
         succeeded,
         failed);
-    return new RawCollectionResult(succeeded + failed, succeeded, failed);
+    return new RawCollectionResult(succeeded + failed, succeeded, failed, stoppedEarly);
   }
 
   /**
