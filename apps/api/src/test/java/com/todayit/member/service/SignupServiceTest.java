@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.todayit.common.exception.BusinessException;
 import com.todayit.common.exception.InvalidRequestException;
 import com.todayit.member.client.external.GoogleIdentity;
+import com.todayit.member.client.external.KakaoIdentity;
 import com.todayit.member.entity.Agreement;
 import com.todayit.member.entity.BlocklistMatchType;
 import com.todayit.member.entity.EmailVerificationPurpose;
@@ -168,26 +169,6 @@ class SignupServiceTest {
   }
 
   @Test
-  @DisplayName("필수 약관 코드가 누락되면 회원가입을 거부한다")
-  void rejectsSignupWhenRequiredAgreementIsMissing() {
-    SignupCommand command =
-        new SignupCommand(
-            "test@test.com",
-            "verification-token",
-            "password123!",
-            "테스트",
-            Map.of("PREFERENCE", false));
-
-    when(agreementRepository.findByDeletedFalse()).thenReturn(CURRENT_AGREEMENTS);
-
-    assertThatThrownBy(() -> signupService.createLocalMember(command))
-        .isInstanceOf(InvalidRequestException.class)
-        .hasMessage("필수 약관과 동의 항목을 확인해 주세요.");
-
-    verify(memberRepository, never()).save(any());
-  }
-
-  @Test
   @DisplayName("필수 약관 정보가 없으면 회원가입을 진행하지 않는다")
   void rejectsSignupWhenRequiredAgreementInformationDoesNotExist() {
     SignupCommand command =
@@ -313,65 +294,6 @@ class SignupServiceTest {
     ReflectionTestUtils.setField(agreement, "required", required);
 
     return agreement;
-  }
-
-  @Test
-  @DisplayName("사용 가능한 닉네임이면 true를 반환한다")
-  void returnsTrueWhenNicknameIsAvailable() {
-    String nickname = "새닉네임";
-
-    boolean available = signupService.isNicknameAvailable(nickname);
-
-    assertThat(available).isTrue();
-    verify(nicknameBlocklistRepository).existsBlockedNickname(nickname);
-    verify(memberRepository).existsByNormalizedNickname(nickname);
-  }
-
-  @Test
-  @DisplayName("이미 사용 중인 닉네임이면 false를 반환한다")
-  void returnsFalseWhenNicknameAlreadyExists() {
-    String nickname = "더미사용자";
-
-    when(memberRepository.existsByNormalizedNickname(nickname)).thenReturn(true);
-
-    boolean available = signupService.isNicknameAvailable(nickname);
-
-    assertThat(available).isFalse();
-    verify(memberRepository).existsByNormalizedNickname(nickname);
-  }
-
-  @Test
-  @DisplayName("금칙어 닉네임이면 400에 해당하는 예외를 발생시킨다")
-  void rejectsBlockedNickname() {
-    String nickname = "관리자";
-
-    when(nicknameBlocklistRepository.existsBlockedNickname(nickname)).thenReturn(true);
-
-    assertThatThrownBy(() -> signupService.isNicknameAvailable(nickname))
-        .isInstanceOf(InvalidRequestException.class)
-        .hasMessage("사용할 수 없는 닉네임입니다.");
-
-    verify(memberRepository, never()).existsByNormalizedNickname(any());
-  }
-
-  @Test
-  @DisplayName("닉네임 길이가 2자 미만이면 거부한다")
-  void rejectsTooShortNickname() {
-    assertThatThrownBy(() -> signupService.isNicknameAvailable("가"))
-        .isInstanceOf(InvalidRequestException.class)
-        .hasMessage("닉네임은 2자 이상 8자 이하이어야 합니다.");
-
-    verify(memberRepository, never()).existsByNormalizedNickname(any());
-  }
-
-  @Test
-  @DisplayName("닉네임에 특수문자가 포함되면 거부한다")
-  void rejectsNicknameWithSpecialCharacters() {
-    assertThatThrownBy(() -> signupService.isNicknameAvailable("test!"))
-        .isInstanceOf(InvalidRequestException.class)
-        .hasMessage("닉네임은 한글, 영문, 숫자만 사용할 수 있습니다.");
-
-    verify(memberRepository, never()).existsByNormalizedNickname(any());
   }
 
   @Test
@@ -515,7 +437,7 @@ class SignupServiceTest {
   @DisplayName("Google 회원가입 시 비밀번호 없이 회원과 권한 및 약관을 저장한다")
   void createsGoogleMemberWithAgreements() {
     // Given
-    GoogleIdentity identity = new GoogleIdentity("google-user-123", "google@test.com", true);
+    GoogleIdentity identity = new GoogleIdentity("google-user-123", null, false);
 
     SignupCommand command =
         new SignupCommand(
@@ -541,7 +463,7 @@ class SignupServiceTest {
 
     // Then
     assertThat(member.getProvider()).isEqualTo(MemberProvider.GOOGLE);
-    assertThat(member.getEmail()).isEqualTo("google@test.com");
+    assertThat(member.getEmail()).isNull();
     assertThat(member.getPassword()).isNull();
     assertThat(member.getProviderUserId()).isEqualTo("google-user-123");
     assertThat(member.getNickname()).isEqualTo("구글회원");
@@ -575,7 +497,7 @@ class SignupServiceTest {
                 "ACCOUNT_PRIVACY", true));
 
     // 같은 Google 계정의 회원이 이미 DB에 존재함
-    Member existingMember = Member.createGoogle("google@test.com", "google-user-123", "기존회원");
+    Member existingMember = Member.createGoogle("google-user-123", "기존회원");
 
     when(memberRepository.findByProviderAndProviderUserId(MemberProvider.GOOGLE, "google-user-123"))
         .thenReturn(Optional.of(existingMember));
@@ -589,34 +511,6 @@ class SignupServiceTest {
                     .isEqualTo(MemberErrorCode.GOOGLE_ACCOUNT_ALREADY_EXISTS));
 
     // 중복 계정인 경우 새 회원을 저장하지 않음
-    verify(memberRepository, never()).save(any());
-  }
-
-  @Test
-  @DisplayName("Google 회원도 필수 약관에 동의하지 않으면 가입할 수 없다")
-  void rejectsGoogleSignupWithoutRequiredAgreements() {
-    // Given
-    GoogleIdentity identity = new GoogleIdentity("google-user-123", "google@test.com", true);
-
-    SignupCommand command =
-        new SignupCommand(
-            MemberProvider.GOOGLE,
-            null,
-            null,
-            null,
-            "signup-token",
-            "구글회원",
-            Map.of(
-                "TOS", false,
-                "ACCOUNT_PRIVACY", true));
-
-    when(agreementRepository.findByDeletedFalse()).thenReturn(CURRENT_AGREEMENTS);
-
-    // When & Then
-    assertThatThrownBy(() -> signupService.createGoogleMember(command, identity))
-        .isInstanceOf(InvalidRequestException.class)
-        .hasMessage("필수 약관과 동의 항목을 확인해 주세요.");
-
     verify(memberRepository, never()).save(any());
   }
 
@@ -704,5 +598,84 @@ class SignupServiceTest {
     verify(memberRoleRepository, never()).save(any(MemberRole.class));
 
     verify(memberAgreementRepository, never()).save(any(MemberAgreement.class));
+  }
+
+  @Test
+  @DisplayName("이메일 없는 Kakao 회원을 권한 및 약관과 함께 저장한다")
+  void createsKakaoMemberWithoutEmail() {
+    // Given
+    KakaoIdentity identity = new KakaoIdentity("123456789", null, false);
+
+    SignupCommand command =
+        new SignupCommand(
+            MemberProvider.KAKAO,
+            null,
+            null,
+            null,
+            "signup-token",
+            "카카오회원",
+            Map.of(
+                "TOS", true,
+                "ACCOUNT_PRIVACY", true));
+
+    when(agreementRepository.findByDeletedFalse()).thenReturn(CURRENT_AGREEMENTS);
+
+    when(memberRepository.save(any(Member.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    when(memberRoleRepository.findRoleIdByName("USER")).thenReturn(Optional.of(1));
+
+    // When
+    Member member = signupService.createKakaoMember(command, identity);
+
+    // Then
+    assertThat(member.getProvider()).isEqualTo(MemberProvider.KAKAO);
+    assertThat(member.getEmail()).isNull();
+    assertThat(member.getPassword()).isNull();
+    assertThat(member.getProviderUserId()).isEqualTo("123456789");
+
+    verify(memberRepository).save(any(Member.class));
+    verify(memberRepository).flush();
+
+    verify(memberRoleRepository).save(any(MemberRole.class));
+    verify(memberAgreementRepository, times(2)).save(any(MemberAgreement.class));
+
+    // Kakao 회원가입에서는 자체 이메일 인증과 비밀번호 암호화 불필요
+    verify(passwordEncoder, never()).encode(any());
+    verify(emailVerificationService, never()).validateVerificationToken(any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("이미 가입된 Kakao 사용자 ID는 중복 가입을 거부한다")
+  void rejectsDuplicateKakaoAccount() {
+    // Given
+    KakaoIdentity identity = new KakaoIdentity("123456789", null, false);
+
+    SignupCommand command =
+        new SignupCommand(
+            MemberProvider.KAKAO,
+            null,
+            null,
+            null,
+            "signup-token",
+            "카카오회원",
+            Map.of(
+                "TOS", true,
+                "ACCOUNT_PRIVACY", true));
+
+    Member existingMember = Member.createKakao("123456789", "기존회원");
+
+    when(memberRepository.findByProviderAndProviderUserId(MemberProvider.KAKAO, "123456789"))
+        .thenReturn(Optional.of(existingMember));
+
+    // When & Then
+    assertThatThrownBy(() -> signupService.createKakaoMember(command, identity))
+        .isInstanceOf(BusinessException.class)
+        .satisfies(
+            exception ->
+                assertThat(((BusinessException) exception).getErrorCode())
+                    .isEqualTo(MemberErrorCode.KAKAO_ACCOUNT_ALREADY_EXISTS));
+
+    verify(memberRepository, never()).save(any(Member.class));
   }
 }

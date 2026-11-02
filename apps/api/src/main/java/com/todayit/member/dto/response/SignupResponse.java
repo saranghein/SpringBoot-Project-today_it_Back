@@ -17,7 +17,10 @@ import java.time.LocalDateTime;
 public record SignupResponse(
     @Schema(description = "생성된 회원 식별자입니다.", example = "123e4567-e89b-12d3-a456-426614174000")
         String memberId,
-    @Schema(description = "가입한 이메일입니다.", example = "user@example.com") String email,
+    @Schema(
+            description = "LOCAL 회원 이메일입니다. GOOGLE·KAKAO 회원은 null입니다.",
+            example = "user@example.com")
+        String email,
     @Schema(description = "회원 닉네임입니다.", example = "오늘") String nickname,
     @Schema(description = "커플 연결 여부입니다.", example = "false") boolean coupleConnected,
     @Schema(description = "회원 생성 시각입니다. ISO-8601 형식입니다.", example = "2026-10-11T09:00:00")

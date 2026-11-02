@@ -10,7 +10,7 @@ import java.util.Map;
  * @param email LOCAL 회원 이메일
  * @param emailVerificationToken LOCAL 이메일 인증 완료 토큰
  * @param password LOCAL 회원 비밀번호
- * @param signupToken GOOGLE 회원가입용 임시 토큰
+ * @param signupToken GOOGLE 또는 KAKAO 회원가입용 임시 토큰
  * @param nickname 회원 닉네임
  * @param agreements 약관 코드별 동의 여부
  */

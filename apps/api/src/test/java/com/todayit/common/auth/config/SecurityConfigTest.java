@@ -19,8 +19,10 @@ import com.todayit.common.auth.token.RefreshTokenService;
 import com.todayit.common.pagination.PageResult;
 import com.todayit.course.service.CoursePlaceQueryService;
 import com.todayit.member.service.GoogleLoginService;
+import com.todayit.member.service.KakaoLoginService;
 import com.todayit.member.service.LoginFacade;
 import com.todayit.member.service.model.GoogleLoginResult;
+import com.todayit.member.service.model.KakaoLoginResult;
 import com.todayit.member.service.model.LoginResult;
 import com.todayit.member.service.model.MemberLoginResult;
 import com.todayit.place.exception.PlaceNotFoundException;
@@ -80,6 +82,8 @@ public class SecurityConfigTest {
   @MockitoBean private CoursePlaceQueryService coursePlaceQueryService;
 
   @MockitoBean private GoogleLoginService googleLoginService;
+
+  @MockitoBean private KakaoLoginService kakaoLoginService;
 
   @Autowired
   SecurityConfigTest(MockMvc mockMvc) {
@@ -420,6 +424,38 @@ public class SecurityConfigTest {
 
     // Then
     // Authorization 헤더 없이도 Google 로그인 API에 접근 가능한지 확인
+    response
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.isNewMember").value(true))
+        .andExpect(jsonPath("$.data.signupToken").value("signup-token"));
+  }
+
+  @Test
+  @DisplayName("Kakao 로그인 API는 Access Token 없이 호출할 수 있다")
+  void allowsAnonymousKakaoLogin() throws Exception {
+    // Given
+    String redirectUri = "http://localhost:3000/oauth/kakao/callback";
+
+    // 실제 Kakao 인증 대신 신규 회원 결과 반환
+    when(kakaoLoginService.login("kakao-code", redirectUri))
+        .thenReturn(KakaoLoginResult.newMember("signup-token"));
+
+    // When
+    ResultActions response =
+        mockMvc.perform(
+            post("/api/v1/auth/oauth/kakao")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                                    {
+                                      "authorizationCode": "kakao-code",
+                                      "redirectUri": "http://localhost:3000/oauth/kakao/callback"
+                                    }
+                                    """));
+
+    // Then
+    // Authorization 헤더 없이 접근 가능한지 확인
     response
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))

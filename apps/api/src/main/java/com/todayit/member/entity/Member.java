@@ -17,7 +17,8 @@ public class Member {
   @Column(name = "member_id", length = 36)
   private String id;
 
-  @Column(name = "email", nullable = false, length = 100)
+  // LOCAL 회원만 이메일 저장, 소셜 회원은 null
+  @Column(name = "email", length = 100)
   private String email;
 
   @Column(name = "password", length = 100)
@@ -53,7 +54,9 @@ public class Member {
       String providerUserId) {
 
     this.id = id;
-    this.email = email;
+    // LOCAL 회원만 이메일을 저장
+    // Google·Kakao 회원은 고유 ID로 식별
+    this.email = provider == MemberProvider.LOCAL ? email : null;
     this.password = password;
     this.provider = provider;
     this.nickname = nickname;
@@ -89,18 +92,39 @@ public class Member {
    *
    * <p>Google 회원은 자체 비밀번호를 저장하지 않고, Google 계정 고유 ID를 provider_user_id에 저장합니다.
    *
-   * @param email Google에서 인증된 이메일
    * @param providerUserId Google 계정 고유 식별자(sub)
    * @param nickname 사용자가 등록한 닉네임
    * @return 생성된 Google 회원
    */
-  public static Member createGoogle(String email, String providerUserId, String nickname) {
+  public static Member createGoogle(String providerUserId, String nickname) {
 
     return new Member(
         UUID.randomUUID().toString(),
-        email,
+        null,
         null,
         MemberProvider.GOOGLE,
+        nickname,
+        true,
+        LocalDateTime.now(),
+        providerUserId);
+  }
+
+  /**
+   * Kakao 인증을 완료한 사용자의 회원 정보를 생성합니다.
+   *
+   * <p>Kakao 회원은 자체 비밀번호를 저장하지 않으며, 이메일이 없어도 Kakao 계정 고유 ID로 식별합니다.
+   *
+   * @param providerUserId Kakao 계정 고유 식별자
+   * @param nickname 사용자가 등록한 닉네임
+   * @return 생성된 Kakao 회원
+   */
+  public static Member createKakao(String providerUserId, String nickname) {
+
+    return new Member(
+        UUID.randomUUID().toString(),
+        null,
+        null,
+        MemberProvider.KAKAO,
         nickname,
         true,
         LocalDateTime.now(),

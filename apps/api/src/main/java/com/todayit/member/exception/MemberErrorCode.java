@@ -47,11 +47,20 @@ public enum MemberErrorCode implements ErrorCode {
   GOOGLE_AUTHENTICATION_FAILED(
       "GOOGLE_AUTHENTICATION_FAILED", "Google 인증에 실패했습니다.", ErrorStatus.UNAUTHORIZED),
 
-  GOOGLE_EMAIL_NOT_VERIFIED(
-      "GOOGLE_EMAIL_NOT_VERIFIED", "인증된 Google 이메일이 필요합니다.", ErrorStatus.UNAUTHORIZED),
-
   GOOGLE_AUTH_SERVER_ERROR(
-      "GOOGLE_AUTH_SERVER_ERROR", "Google 인증 서버에 연결할 수 없습니다.", ErrorStatus.INTERNAL_SERVER_ERROR);
+      "GOOGLE_AUTH_SERVER_ERROR", "Google 인증 서버에 연결할 수 없습니다.", ErrorStatus.INTERNAL_SERVER_ERROR),
+
+  KAKAO_SIGNUP_TOKEN_INVALID(
+      "KAKAO_SIGNUP_TOKEN_INVALID", "Kakao 회원가입 인증 정보가 만료되었거나 유효하지 않습니다.", ErrorStatus.BAD_REQUEST),
+
+  KAKAO_AUTHENTICATION_FAILED(
+      "KAKAO_AUTHENTICATION_FAILED", "Kakao 인증에 실패했습니다.", ErrorStatus.UNAUTHORIZED),
+
+  KAKAO_AUTH_SERVER_ERROR(
+      "KAKAO_AUTH_SERVER_ERROR", "Kakao 인증 서버에 연결할 수 없습니다.", ErrorStatus.INTERNAL_SERVER_ERROR),
+
+  KAKAO_ACCOUNT_ALREADY_EXISTS(
+      "KAKAO_ACCOUNT_ALREADY_EXISTS", "이미 가입된 Kakao 계정입니다.", ErrorStatus.CONFLICT);
 
   private final String code;
   private final String message;

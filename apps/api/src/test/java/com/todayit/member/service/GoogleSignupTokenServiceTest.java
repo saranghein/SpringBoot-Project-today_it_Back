@@ -21,8 +21,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
@@ -72,7 +70,7 @@ class GoogleSignupTokenServiceTest {
     GoogleIdentity storedIdentity =
         objectMapper.readValue(valueCaptor.getValue(), GoogleIdentity.class);
 
-    assertThat(storedIdentity).isEqualTo(identity);
+    assertThat(storedIdentity).isEqualTo(new GoogleIdentity("google-user-123", null, false));
   }
 
   @Test
@@ -95,27 +93,23 @@ class GoogleSignupTokenServiceTest {
             ArgumentMatchers.anyString(), ArgumentMatchers.anyString(), eq(Duration.ofMinutes(30)));
   }
 
-  @ParameterizedTest
-  @CsvSource({"google-user-123, false", "'', true"})
-  @DisplayName("인증되지 않았거나 사용자 ID가 없으면 가입 토큰을 발급하지 않는다")
-  void rejectsInvalidGoogleIdentity(String providerUserId, boolean emailVerified) {
+  @Test
+  @DisplayName("Google 사용자 고유 ID가 없으면 가입 토큰을 발급하지 않는다")
+  void rejectsMissingGoogleUserId() {
+    GoogleIdentity identity = new GoogleIdentity(null, null, false);
 
-    // Given
-    GoogleIdentity identity = new GoogleIdentity(providerUserId, "test@gmail.com", emailVerified);
-
-    // When & Then
     assertThatThrownBy(() -> service.issue(identity)).isInstanceOf(IllegalArgumentException.class);
 
-    // 잘못된 인증 정보는 Redis에 저장하지 않음
     verifyNoInteractions(redisTemplate);
   }
 
   @Test
-  @DisplayName("유효한 Google 가입 토큰으로 인증된 사용자 정보를 조회한다")
+  @DisplayName("유효한 Google 가입 토큰으로 사용자 고유 ID를 조회한다")
   void getsVerifiedGoogleIdentity() throws Exception {
     // Given
     String signupToken = "a".repeat(43);
 
+    // 기존 Redis에 이메일이 포함된 인증 정보가 남아 있는 상황
     GoogleIdentity identity = new GoogleIdentity("google-user-123", "test@gmail.com", true);
 
     when(redisTemplate.opsForValue()).thenReturn(valueOperations);
@@ -125,7 +119,8 @@ class GoogleSignupTokenServiceTest {
     GoogleIdentity result = service.getVerifiedIdentity(signupToken);
 
     // Then
-    assertThat(result).isEqualTo(identity);
+    // 이메일 정보는 제거하고 고유 ID만 반환하는지 확인
+    assertThat(result).isEqualTo(new GoogleIdentity("google-user-123", null, false));
 
     // 인증 정보를 조회하는 것만으로 토큰을 삭제하지 않음
     verify(redisTemplate, never()).delete(anyString());
