@@ -50,7 +50,7 @@ class PlaceUpsertCommandServiceTest {
   /** 정상 정제 결과가 아니면 지역 조회와 저장을 건너뛰는지 검증합니다. */
   @Test
   void unnormalizedPlaceNeverReadsRegionOrWritesAnything() {
-    var result =
+    PlaceUpsertResult result =
         service.upsert(
             new PlaceNormalizationResult(
                 1,
@@ -79,9 +79,9 @@ class PlaceUpsertCommandServiceTest {
   void passesProviderIdentityAndResolvedRegionToAtomicStorageContract() {
     when(regions.findRegionId("11", "110")).thenReturn(Optional.of(7));
     when(repository.upsert(anyString(), anyString(), anyInt(), any())).thenReturn(23);
-    var input = normalized();
+    PlaceNormalizationResult input = normalized();
 
-    var result = service.upsert(input);
+    PlaceUpsertResult result = service.upsert(input);
 
     assertThat(result.placeId()).isEqualTo(23);
     assertThat(result.status()).isEqualTo(PlaceUpsertResult.Status.APPLIED);
