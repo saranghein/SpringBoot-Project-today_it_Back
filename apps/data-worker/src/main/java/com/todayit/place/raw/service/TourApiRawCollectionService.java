@@ -2,6 +2,7 @@ package com.todayit.place.raw.service;
 
 import com.todayit.place.client.external.PlaceDataSource;
 import com.todayit.place.client.external.PlaceDataSource.Component;
+import com.todayit.place.client.external.PlaceDataSource.SourceComponent;
 import com.todayit.place.client.external.PlaceDataSource.SourceComponentRequest;
 import com.todayit.place.client.external.PlaceDataSource.SourceItem;
 import com.todayit.place.client.external.PlaceDataSource.SourceKey;
@@ -15,6 +16,7 @@ import com.todayit.place.raw.service.model.RawCollectionResult;
 import com.todayit.place.raw.service.model.RawRetryTarget;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -81,7 +83,8 @@ public class TourApiRawCollectionService {
     }
     PlaceDataSource source = registry.get(SOURCE);
     logScope(scope);
-    var page = source.fetchPage(new SourcePageRequest(Component.BASIC, "", limit, scope.filters()));
+    SourcePage page =
+        source.fetchPage(new SourcePageRequest(Component.BASIC, "", limit, scope.filters()));
     if (page.items().size() > limit
         || page.items().stream().map(SourceItem::sourceId).distinct().count()
             != page.items().size()) {
@@ -136,8 +139,8 @@ public class TourApiRawCollectionService {
     }
     PlaceDataSource source = registry.get(SOURCE);
     logScope(scope);
-    var cursors = new HashSet<String>();
-    var sourceIds = new HashSet<String>();
+    HashSet<String> cursors = new HashSet<String>();
+    HashSet<String> sourceIds = new HashSet<String>();
     String cursor = "";
     long expectedTotal = -1;
     int pages = 0;
@@ -246,7 +249,7 @@ public class TourApiRawCollectionService {
    */
   @Transactional(propagation = Propagation.NEVER)
   public RawCollectionResult retryFailed(int limit) {
-    var targets = queryService.findFailed(SOURCE.provider(), limit);
+    List<RawRetryTarget> targets = queryService.findFailed(SOURCE.provider(), limit);
     if (targets.isEmpty()) {
       LOG.info("PLACE_RAW_RETRY 재수집 대상 없음 공급원=TOUR_API");
       return new RawCollectionResult(0, 0, 0);
@@ -351,7 +354,7 @@ public class TourApiRawCollectionService {
           component == Component.INTRODUCTION
               ? Map.of("contentTypeId", list.path("contenttypeid").asText())
               : Map.of();
-      var detail =
+      SourceComponent detail =
           source.fetchComponent(new SourceComponentRequest(item.sourceId(), component, filters));
       JsonNode rows = read(detail.payloadJson());
       if (!item.sourceId().equals(detail.sourceId())

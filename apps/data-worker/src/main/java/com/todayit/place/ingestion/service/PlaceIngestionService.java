@@ -2,8 +2,11 @@ package com.todayit.place.ingestion.service;
 
 import com.todayit.place.ingestion.service.PlaceIngestionFailureService.Code;
 import com.todayit.place.ingestion.service.model.PlaceIngestionResult;
+import com.todayit.place.ingestion.service.model.PlaceIngestionRetryTarget;
+import com.todayit.place.ingestion.service.model.PlaceUpsertResult;
 import com.todayit.place.raw.service.ExternalPlaceRawQueryService;
 import com.todayit.place.raw.service.TourApiPlaceNormalizationService;
+import com.todayit.place.raw.service.model.PlaceNormalizationResult;
 import com.todayit.place.raw.service.model.PlaceNormalizationResult.Status;
 import com.todayit.place.raw.service.model.RawPlaceSnapshot;
 import java.util.List;
@@ -57,7 +60,7 @@ public class PlaceIngestionService {
   @Transactional(propagation = Propagation.NEVER)
   public PlaceIngestionResult ingestTourApi(int limit) {
     validateLimit(limit);
-    var result = ingestBatch(rawQueryService.findSucceeded("TOUR_API", limit));
+    PlaceIngestionResult result = ingestBatch(rawQueryService.findSucceeded("TOUR_API", limit));
     logResult(result);
     return result;
   }
@@ -76,9 +79,9 @@ public class PlaceIngestionService {
     validateLimit(batchSize);
     long upperBound = rawQueryService.findSucceededUpperBound("TOUR_API");
     long afterId = 0;
-    var total = new PlaceIngestionResult(0, 0, 0, 0, 0, 0);
+    PlaceIngestionResult total = new PlaceIngestionResult(0, 0, 0, 0, 0, 0);
     while (afterId < upperBound) {
-      var snapshots =
+      List<RawPlaceSnapshot> snapshots =
           rawQueryService.findSucceededAfter("TOUR_API", afterId, upperBound, batchSize);
       if (snapshots.isEmpty()) {
         break;
@@ -87,7 +90,7 @@ public class PlaceIngestionService {
       if (nextId <= afterId || nextId > upperBound) {
         throw new IllegalStateException("원본 조회 ID가 실행 범위 내에서 전진해야 합니다.");
       }
-      var batch = ingestBatch(snapshots);
+      PlaceIngestionResult batch = ingestBatch(snapshots);
       total = addResults(total, batch);
       afterId = nextId;
       LOG.info(
@@ -116,9 +119,10 @@ public class PlaceIngestionService {
     validateLimit(batchSize);
     long upperBound = failureService.findUpperBound("TOUR_API");
     long afterId = 0;
-    var total = new PlaceIngestionResult(0, 0, 0, 0, 0, 0);
+    PlaceIngestionResult total = new PlaceIngestionResult(0, 0, 0, 0, 0, 0);
     while (afterId < upperBound) {
-      var targets = failureService.findAfter("TOUR_API", afterId, upperBound, batchSize);
+      List<PlaceIngestionRetryTarget> targets =
+          failureService.findAfter("TOUR_API", afterId, upperBound, batchSize);
       if (targets.isEmpty()) {
         break;
       }
@@ -182,8 +186,8 @@ public class PlaceIngestionService {
     int reviewRequired = 0;
     int regionMissing = 0;
     int failed = 0;
-    for (var snapshot : snapshots) {
-      var normalized = normalizer.normalize(snapshot);
+    for (RawPlaceSnapshot snapshot : snapshots) {
+      PlaceNormalizationResult normalized = normalizer.normalize(snapshot);
       if (normalized.status() == Status.EXCLUDED) {
         excluded++;
         continue;
@@ -193,7 +197,7 @@ public class PlaceIngestionService {
         continue;
       }
       try {
-        var result = commandService.upsert(normalized);
+        PlaceUpsertResult result = commandService.upsert(normalized);
         switch (result.status()) {
           // Spring의 별도 저장 Bean이 반환된 시점에는 해당 장소 트랜잭션의 커밋이 완료됐습니다.
           case APPLIED -> stored++;

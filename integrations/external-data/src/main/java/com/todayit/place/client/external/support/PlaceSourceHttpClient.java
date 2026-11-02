@@ -3,6 +3,7 @@ package com.todayit.place.client.external.support;
 import com.todayit.place.client.external.PlaceSourceException;
 import com.todayit.place.client.external.PlaceSourceException.Reason;
 import java.io.StringReader;
+import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.core.io.buffer.DataBufferLimitException;
@@ -65,17 +67,17 @@ public final class PlaceSourceHttpClient {
       throw new PlaceSourceException(Reason.AUTHENTICATION);
     }
     try {
-      var builder = UriComponentsBuilder.fromUriString(baseUrl).path(path);
+      UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(baseUrl).path(path);
       Map<String, Object> variables = new LinkedHashMap<>();
       int index = 0;
-      for (var entry : parameters.entrySet()) {
+      for (Map.Entry<String, String> entry : parameters.entrySet()) {
         String variable = "p" + index++;
         builder.queryParam(entry.getKey(), "{" + variable + "}");
         variables.put(variable, entry.getValue());
       }
       builder.queryParam("serviceKey", "{credential}");
       variables.put("credential", serviceKey);
-      var uri = builder.encode().buildAndExpand(variables).toUri();
+      URI uri = builder.encode().buildAndExpand(variables).toUri();
       String body =
           client
               .get()
@@ -151,7 +153,7 @@ public final class PlaceSourceHttpClient {
       if (!body.stripLeading().startsWith("<")) {
         return mapper.readTree(body);
       }
-      var factory = DocumentBuilderFactory.newInstance();
+      DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
       factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
       factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
       factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
@@ -159,7 +161,7 @@ public final class PlaceSourceHttpClient {
       factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
       factory.setXIncludeAware(false);
       factory.setExpandEntityReferences(false);
-      var parser = factory.newDocumentBuilder();
+      DocumentBuilder parser = factory.newDocumentBuilder();
       parser.setErrorHandler(new DefaultHandler());
       Element root = parser.parse(new InputSource(new StringReader(body))).getDocumentElement();
       return mapper.valueToTree(Map.of(root.getTagName(), xmlValue(root)));

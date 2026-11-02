@@ -48,7 +48,7 @@ public record RawCollectionProperties(
    * @throws IllegalArgumentException 코드가 잘못됐거나 동일 조합이 중복될 때
    */
   public List<TourApiCollectionScope> toScopes() {
-    var scopes =
+    List<TourApiCollectionScope> scopes =
         targets.isEmpty() ? List.of(toScope()) : targets.stream().map(Target::toScope).toList();
     if (scopes.stream().distinct().count() != scopes.size()) {
       throw new IllegalArgumentException("동일한 수집 지역·관광타입 조합을 중복 지정할 수 없습니다.");

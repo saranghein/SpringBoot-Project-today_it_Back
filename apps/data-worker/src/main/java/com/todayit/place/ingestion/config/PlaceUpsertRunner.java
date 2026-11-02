@@ -1,6 +1,7 @@
 package com.todayit.place.ingestion.config;
 
 import com.todayit.place.ingestion.service.PlaceIngestionService;
+import com.todayit.place.ingestion.service.model.PlaceIngestionResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -41,7 +42,7 @@ public class PlaceUpsertRunner implements ApplicationRunner {
 
   @Override
   public void run(ApplicationArguments args) {
-    var result =
+    PlaceIngestionResult result =
         switch (properties.mode()) {
           case SAMPLE -> ingestionService.ingestTourApi(properties.limit());
           case FULL -> ingestionService.ingestAllTourApi(properties.limit());

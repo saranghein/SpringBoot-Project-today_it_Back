@@ -5,6 +5,8 @@ import com.todayit.place.ingestion.repository.PlaceSourceRepository;
 import com.todayit.place.ingestion.service.model.PlaceUpsertResult;
 import com.todayit.place.ingestion.service.model.PlaceUpsertResult.Status;
 import com.todayit.place.raw.service.model.PlaceNormalizationResult;
+import com.todayit.place.service.model.NormalizedPlace;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -53,8 +55,9 @@ public class PlaceUpsertCommandService {
     if (result.place() == null || result.sourceId() == null || result.sourceId().isBlank()) {
       throw new IllegalArgumentException("정상 정제 결과의 필수 값이 없습니다.");
     }
-    var place = result.place();
-    var regionId = regionQueryService.findRegionId(place.sidoCode(), place.sigunguCode());
+    NormalizedPlace place = result.place();
+    Optional<Integer> regionId =
+        regionQueryService.findRegionId(place.sidoCode(), place.sigunguCode());
     if (regionId.isEmpty()) {
       LOG.info("PLACE_UPSERT_DEFERRED 장소 적재 보류 공급원=TOUR_API 사유=지역 미등록");
       return new PlaceUpsertResult(result.sourceId(), Status.REGION_NOT_FOUND, null);

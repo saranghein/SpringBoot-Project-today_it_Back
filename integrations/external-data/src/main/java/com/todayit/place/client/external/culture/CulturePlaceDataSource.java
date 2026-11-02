@@ -9,6 +9,7 @@ import com.todayit.place.client.external.support.PlaceSourceHttpClient;
 import com.todayit.place.client.external.support.SourceResponses;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import tools.jackson.databind.JsonNode;
@@ -63,7 +64,7 @@ public final class CulturePlaceDataSource implements PlaceDataSource {
     parameters.remove("facility");
     parameters.put("PageNo", Integer.toString(SourceResponses.pageNumber(request.cursor())));
     parameters.put("numOfrows", Integer.toString(request.pageSize()));
-    var body = responseBody("/" + facility, parameters);
+    JsonNode body = responseBody("/" + facility, parameters);
     return SourceResponses.page(
         request,
         body.path("items").path("item"),
@@ -92,8 +93,8 @@ public final class CulturePlaceDataSource implements PlaceDataSource {
   private SourceComponent fetchComponentInternal(SourceComponentRequest request) {
     requireBasic(request.component());
     SourceResponses.validateFilters(request.filters(), Set.of());
-    var body = responseBody("/detail", Map.of("seq", request.sourceId()));
-    var items = SourceResponses.rows(body.path("items").path("item"));
+    JsonNode body = responseBody("/detail", Map.of("seq", request.sourceId()));
+    List<JsonNode> items = SourceResponses.rows(body.path("items").path("item"));
     if (items.isEmpty()
         || items.stream().anyMatch(item -> !request.sourceId().equals(item.path("seq").asText()))) {
       throw new PlaceSourceException(Reason.INVALID_RESPONSE);
@@ -123,15 +124,15 @@ public final class CulturePlaceDataSource implements PlaceDataSource {
    * @throws PlaceSourceException 외부 호출·업무 코드·body 구조 검증 실패 시
    */
   private JsonNode responseBody(String path, Map<String, String> parameters) {
-    var response = http.get(path, parameters).path("response");
-    var header = response.path("header");
+    JsonNode response = http.get(path, parameters).path("response");
+    JsonNode header = response.path("header");
     // 2024.12.19 공식 배포 가이드에는 reseultCode로 기재돼 있습니다.
     String code =
         header.has("resultCode")
             ? header.path("resultCode").asText()
             : header.path("reseultCode").asText();
     PlaceSourceHttpClient.checkCode(code);
-    var body = response.path("body");
+    JsonNode body = response.path("body");
     if (!body.isObject()) {
       throw new PlaceSourceException(Reason.INVALID_RESPONSE);
     }

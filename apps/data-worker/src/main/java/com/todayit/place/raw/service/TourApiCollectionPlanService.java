@@ -66,7 +66,7 @@ public class TourApiCollectionPlanService {
     int succeeded = 0;
     int failed = 0;
     int visited = 0;
-    for (var scope : scopes) {
+    for (TourApiCollectionScope scope : scopes) {
       LOG.info(
           "PLACE_RAW_PLAN_TARGET 수집 대상 시작 순서={} 전체={} 시도={} 시군구={} 관광타입={}",
           visited + 1,

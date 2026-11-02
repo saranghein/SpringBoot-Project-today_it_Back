@@ -37,7 +37,7 @@ public class PlaceNormalizationQueryService {
    */
   @Transactional(propagation = Propagation.NEVER)
   public List<PlaceNormalizationResult> previewTourApi(int limit) {
-    var results =
+    List<PlaceNormalizationResult> results =
         rawQueryService.findSucceeded("TOUR_API", limit).stream()
             .map(normalizer::normalize)
             .toList();

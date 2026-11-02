@@ -5,6 +5,7 @@ import com.todayit.place.raw.repository.ExternalPlaceRawRepository;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 /** Today-it 외부 데이터 처리 애플리케이션의 실행 진입점입니다. */
@@ -19,7 +20,8 @@ public class DataWorkerApplication {
    * @param args 애플리케이션 실행 인자
    */
   public static void main(String[] args) {
-    var context = SpringApplication.run(DataWorkerApplication.class, args);
+    ConfigurableApplicationContext context =
+        SpringApplication.run(DataWorkerApplication.class, args);
     if (!context
         .getEnvironment()
         .getProperty("todayit.place.schedule.enabled", Boolean.class, false)) {

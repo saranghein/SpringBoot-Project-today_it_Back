@@ -1,6 +1,8 @@
 package com.todayit.place.ingestion.service;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -33,7 +35,7 @@ public class PlaceJobLock {
    */
   @Transactional(propagation = Propagation.NEVER)
   public boolean runIfAvailable(Runnable task) {
-    try (var connection = dataSource.getConnection()) {
+    try (Connection connection = dataSource.getConnection()) {
       if (!connection.getAutoCommit()) {
         throw new SQLException("잠금 세션은 자동 커밋 연결이어야 합니다.");
       }
@@ -78,10 +80,10 @@ public class PlaceJobLock {
    * @throws SQLException 연결·쿼리 오류가 발생할 때
    */
   private boolean query(Connection connection, String sql) throws SQLException {
-    try (var statement = connection.prepareStatement(sql)) {
+    try (PreparedStatement statement = connection.prepareStatement(sql)) {
       statement.setQueryTimeout(5);
       statement.setLong(1, LOCK_KEY);
-      try (var rows = statement.executeQuery()) {
+      try (ResultSet rows = statement.executeQuery()) {
         return rows.next() && rows.getBoolean(1);
       }
     } catch (SQLException exception) {

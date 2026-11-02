@@ -51,12 +51,12 @@ public class TourApiCollectionTargetQueryService {
     if (!properties.targets().isEmpty()) {
       throw new IllegalArgumentException("전국 수집과 수동 targets를 함께 지정할 수 없습니다.");
     }
-    var codes =
+    List<String> codes =
         jdbc.queryForList("SELECT DISTINCT sido_code FROM region ORDER BY sido_code", String.class);
     if (codes.isEmpty()) {
       throw new IllegalStateException("전국 수집에 필요한 지역 기준 데이터가 없습니다.");
     }
-    var scopes = new ArrayList<TourApiCollectionScope>();
+    ArrayList<TourApiCollectionScope> scopes = new ArrayList<TourApiCollectionScope>();
     for (String code : codes) {
       for (String type : nationwide.contentTypeIds()) {
         scopes.add(new TourApiCollectionScope(code, "", type));

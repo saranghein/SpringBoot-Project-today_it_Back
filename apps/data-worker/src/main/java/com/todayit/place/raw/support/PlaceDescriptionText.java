@@ -37,7 +37,7 @@ public final class PlaceDescriptionText {
       return null;
     }
     StringBuilder result = new StringBuilder();
-    var callback =
+    HTMLEditorKit.ParserCallback callback =
         new HTMLEditorKit.ParserCallback() {
           private int suppressed;
 

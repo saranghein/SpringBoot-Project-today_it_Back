@@ -86,7 +86,7 @@ public class PlaceScheduleConfiguration {
    */
   @Bean
   public ThreadPoolTaskScheduler placeTaskScheduler() {
-    var scheduler = new ThreadPoolTaskScheduler();
+    ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
     scheduler.setPoolSize(2);
     scheduler.setDaemon(false);
     scheduler.setThreadNamePrefix("place-schedule-");

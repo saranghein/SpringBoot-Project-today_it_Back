@@ -1,5 +1,7 @@
 package com.todayit.place.client.external;
 
+import com.todayit.place.client.external.PlaceSourceProperties.ProviderProperties;
+import com.todayit.place.client.external.PlaceSourceProperties.TourApiProperties;
 import com.todayit.place.client.external.culture.CulturePlaceDataSource;
 import com.todayit.place.client.external.redtable.RedtablePlaceDataSource;
 import com.todayit.place.client.external.support.PlaceSourceHttpClient;
@@ -26,7 +28,7 @@ public class PlaceSourceConfiguration {
   @Bean
   @ConditionalOnProperty(name = "todayit.place.sources.tourapi.enabled", havingValue = "true")
   public TourApiPlaceDataSource tourApiPlaceDataSource(PlaceSourceProperties properties) {
-    var tourapi = properties.tourapi();
+    TourApiProperties tourapi = properties.tourapi();
     return new TourApiPlaceDataSource(
         http(
             "https://apis.data.go.kr/B551011/KorService2", tourapi.serviceKey(), tourapi.timeout()),
@@ -42,7 +44,7 @@ public class PlaceSourceConfiguration {
   @Bean
   @ConditionalOnProperty(name = "todayit.place.sources.redtable.enabled", havingValue = "true")
   public RedtablePlaceDataSource redtablePlaceDataSource(PlaceSourceProperties properties) {
-    var redtable = properties.redtable();
+    ProviderProperties redtable = properties.redtable();
     return new RedtablePlaceDataSource(
         http("https://seoul.openapi.redtable.global", redtable.serviceKey(), redtable.timeout()));
   }
@@ -56,7 +58,7 @@ public class PlaceSourceConfiguration {
   @Bean
   @ConditionalOnProperty(name = "todayit.place.sources.culture.enabled", havingValue = "true")
   public CulturePlaceDataSource culturePlaceDataSource(PlaceSourceProperties properties) {
-    var culture = properties.culture();
+    ProviderProperties culture = properties.culture();
     return new CulturePlaceDataSource(
         http(
             "https://apis.data.go.kr/B553457/nopenapi/rest/cultureartspaces",

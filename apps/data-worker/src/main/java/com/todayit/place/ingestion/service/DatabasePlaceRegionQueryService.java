@@ -1,5 +1,6 @@
 package com.todayit.place.ingestion.service;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,7 +40,7 @@ public class DatabasePlaceRegionQueryService implements PlaceRegionQueryService 
         || !sigunguCode.matches("[0-9]{3}")) {
       throw new IllegalArgumentException("지역 코드는 시도 2자리·시군구 3자리여야 합니다.");
     }
-    var ids =
+    List<Integer> ids =
         jdbc.queryForList(
             "SELECT region_id FROM region WHERE sido_code = ? AND sigungu_code = ? LIMIT 2",
             Integer.class,
