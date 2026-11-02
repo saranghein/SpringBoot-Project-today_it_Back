@@ -23,8 +23,11 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,10 +117,11 @@ class PostgresPlaceSourceRepositoryTest {
   /** 신규 활성 장소·원천·지역 연결과 정제된 원본 이미지 URL을 함께 저장하는지 검증합니다. */
   @Test
   void createsActivePlaceSourceRegionAndOriginalImageUrls() {
-    var result = service.upsert(normalized("001", "공원", "소개"));
+    PlaceUpsertResult result = service.upsert(normalized("001", "공원", "소개"));
 
     assertThat(result.status()).isEqualTo(PlaceUpsertResult.Status.APPLIED);
-    var row = jdbc.queryForMap("SELECT * FROM place WHERE place_id = ?", result.placeId());
+    Map<String, Object> row =
+        jdbc.queryForMap("SELECT * FROM place WHERE place_id = ?", result.placeId());
     assertThat(row.get("is_active")).isEqualTo(true);
     assertThat(row.get("is_deleted")).isEqualTo(false);
     assertThat(row.get("view_count")).isEqualTo(0);
@@ -136,16 +140,16 @@ class PostgresPlaceSourceRepositoryTest {
   /** 동일 원천을 재적재해도 장소·지역 연결과 최초 생성 시각이 유지되는지 검증합니다. */
   @Test
   void repeatedSourceKeepsOnePlaceAndOneRegionLinkAndSameCreationTime() {
-    var first = service.upsert(normalized("001", "공원", null));
-    var created =
+    PlaceUpsertResult first = service.upsert(normalized("001", "공원", null));
+    OffsetDateTime created =
         jdbc.queryForObject(
             "SELECT created_at FROM place WHERE place_id = ?",
             OffsetDateTime.class,
             first.placeId());
-    var originalImages =
+    List<Map<String, Object>> originalImages =
         jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", first.placeId());
 
-    var second = service.upsert(normalized("001", "바뀐 이름", "소개 추가"));
+    PlaceUpsertResult second = service.upsert(normalized("001", "바뀐 이름", "소개 추가"));
 
     assertThat(second.placeId()).isEqualTo(first.placeId());
     assertThat(count("place")).isEqualTo(1);
@@ -185,7 +189,7 @@ class PostgresPlaceSourceRepositoryTest {
 
     service.upsert(normalized("001", "새 이름", null));
 
-    var row = jdbc.queryForMap("SELECT * FROM place WHERE place_id = ?", id);
+    Map<String, Object> row = jdbc.queryForMap("SELECT * FROM place WHERE place_id = ?", id);
     assertThat(row.get("name")).isEqualTo("새 이름");
     assertThat(row.get("description")).isEqualTo("기존 소개");
     assertThat(row.get("view_count")).isEqualTo(17);
@@ -236,7 +240,8 @@ class PostgresPlaceSourceRepositoryTest {
     assertThatThrownBy(() -> service.upsert(normalized("001", "바뀌면 안 되는 이름", "바뀌면 안 되는 소개")))
         .isInstanceOf(RuntimeException.class);
 
-    var row = jdbc.queryForMap("SELECT name, description FROM place WHERE place_id = ?", id);
+    Map<String, Object> row =
+        jdbc.queryForMap("SELECT name, description FROM place WHERE place_id = ?", id);
     assertThat(row.get("name")).isEqualTo("기존 이름");
     assertThat(row.get("description")).isEqualTo("기존 소개");
     assertThat(count("place_source")).isEqualTo(1);
@@ -250,14 +255,14 @@ class PostgresPlaceSourceRepositoryTest {
    */
   @Test
   void concurrentFirstWritesReturnSamePlaceWithoutOrphansOrDuplicateLinks() throws Exception {
-    var input = normalized("001", "공원", "소개");
-    try (var executor = Executors.newFixedThreadPool(4)) {
-      var futures =
+    PlaceNormalizationResult input = normalized("001", "공원", "소개");
+    try (ExecutorService executor = Executors.newFixedThreadPool(4)) {
+      List<Future<PlaceUpsertResult>> futures =
           IntStream.range(0, 8)
               .mapToObj(index -> executor.submit(() -> service.upsert(input)))
               .toList();
-      var ids = new HashSet<Integer>();
-      for (var future : futures) {
+      HashSet<Integer> ids = new HashSet<Integer>();
+      for (Future<PlaceUpsertResult> future : futures) {
         ids.add(future.get(30, TimeUnit.SECONDS).placeId());
       }
       assertThat(ids).hasSize(1);
@@ -282,7 +287,7 @@ class PostgresPlaceSourceRepositoryTest {
   /** 원본 URL만 저장하고 반복 후보·재실행은 중복 추가하지 않으며 새 URL만 추가하는지 확인합니다. */
   @Test
   void appendsOnlyMissingOriginalUrlsAndKeepsExistingImageIdentityAndTimestamps() {
-    var a =
+    Image a =
         new Image(
             "https://example.com/a.jpg",
             "https://example.com/a-small.jpg",
@@ -290,8 +295,9 @@ class PostgresPlaceSourceRepositoryTest {
             "001",
             "Type1");
     int placeId = service.upsert(withImages(normalized("001", "공원", null), a, a)).placeId();
-    var original = jdbc.queryForMap("SELECT * FROM place_image WHERE place_id = ?", placeId);
-    var b = image("https://example.com/b.jpg");
+    Map<String, Object> original =
+        jdbc.queryForMap("SELECT * FROM place_image WHERE place_id = ?", placeId);
+    Image b = image("https://example.com/b.jpg");
 
     service.upsert(withImages(normalized("001", "공원", null), a, b, b));
     service.upsert(withImages(normalized("001", "공원", null), b, a));
@@ -316,7 +322,7 @@ class PostgresPlaceSourceRepositoryTest {
     jdbc.update(
         "INSERT INTO place_image (place_id, image_url) VALUES (?, 'https://example.com/manual.jpg')",
         placeId);
-    var before =
+    List<Map<String, Object>> before =
         jdbc.queryForList(
             "SELECT * FROM place_image WHERE place_id = ? ORDER BY place_image_id", placeId);
 
@@ -335,7 +341,8 @@ class PostgresPlaceSourceRepositoryTest {
     jdbc.update(
         "INSERT INTO place_image (place_id, image_url) VALUES (?, 'https://example.com/manual.jpg')",
         placeId);
-    var before = jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", placeId);
+    List<Map<String, Object>> before =
+        jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", placeId);
 
     service.upsert(
         withImages(normalized("001", "공원", null), image("https://example.com/manual.jpg")));
@@ -347,7 +354,7 @@ class PostgresPlaceSourceRepositoryTest {
   /** 이미지 추가 중 DB 제약 실패가 나면 새 장소·원천·지역과 앞서 추가한 이미지도 함께 롤백되는지 확인합니다. */
   @Test
   void imageFailureRollsBackNewPlaceAndAllItsLinksAndImages() {
-    var invalid = image("https://example.com/" + "a".repeat(2048));
+    Image invalid = image("https://example.com/" + "a".repeat(2048));
 
     assertThatThrownBy(
             () ->
@@ -368,7 +375,8 @@ class PostgresPlaceSourceRepositoryTest {
   @Test
   void imageFailureRollsBackPlaceUpdateAndNewImagesButPreservesExistingImages() {
     int placeId = service.upsert(normalized("001", "기존 이름", "기존 소개")).placeId();
-    var before = jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", placeId);
+    List<Map<String, Object>> before =
+        jdbc.queryForList("SELECT * FROM place_image WHERE place_id = ?", placeId);
 
     assertThatThrownBy(
             () ->
@@ -389,7 +397,7 @@ class PostgresPlaceSourceRepositoryTest {
   /** 빈 이미지 목록은 신규 장소 저장을 막지 않는지 확인합니다. */
   @Test
   void createsPlaceWithoutAnyImages() {
-    var result = service.upsert(withImages(normalized("001", "공원", null)));
+    PlaceUpsertResult result = service.upsert(withImages(normalized("001", "공원", null)));
 
     assertThat(result.status()).isEqualTo(PlaceUpsertResult.Status.APPLIED);
     assertThat(count("place")).isEqualTo(1);
@@ -422,17 +430,17 @@ class PostgresPlaceSourceRepositoryTest {
   void recordsFailureAfterRollbackCountsRepeatedFailureAndClearsOnSuccessfulRetry() {
     successfulRaw("001", "VE030100", "110");
     when(regions.findRegionId("11", "110")).thenReturn(Optional.of(regionId + 100000));
-    var before = jdbc.queryForList("SELECT * FROM external_place_raw");
+    List<Map<String, Object>> before = jdbc.queryForList("SELECT * FROM external_place_raw");
 
     assertThat(ingestionService.ingestAllTourApi(10).failed()).isEqualTo(1);
-    var initial = jdbc.queryForMap("SELECT * FROM place_ingestion_failure");
+    Map<String, Object> initial = jdbc.queryForMap("SELECT * FROM place_ingestion_failure");
     assertThat(initial.get("error_code")).isEqualTo("DATA_INTEGRITY");
     assertThat(initial.get("failure_count")).isEqualTo(1);
     assertThat(count("place")).isZero();
     assertThat(count("place_source")).isZero();
 
     assertThat(ingestionService.retryFailedTourApi(10).failed()).isEqualTo(1);
-    var repeated = jdbc.queryForMap("SELECT * FROM place_ingestion_failure");
+    Map<String, Object> repeated = jdbc.queryForMap("SELECT * FROM place_ingestion_failure");
     assertThat(repeated.get("place_ingestion_failure_id"))
         .isEqualTo(initial.get("place_ingestion_failure_id"));
     assertThat(repeated.get("failure_count")).isEqualTo(2);
@@ -510,11 +518,11 @@ class PostgresPlaceSourceRepositoryTest {
         jdbc.queryForObject("SELECT external_place_raw_id FROM external_place_raw", Long.class);
     failureService.recordFailure(
         rawId, com.todayit.place.ingestion.service.PlaceIngestionFailureService.Code.DATA_ACCESS);
-    var normal = normalized("001", "공원", null);
-    var actual =
+    PlaceNormalizationResult normal = normalized("001", "공원", null);
+    PlaceNormalizationResult actual =
         new PlaceNormalizationResult(
             rawId, normal.sourceId(), normal.status(), normal.reason(), normal.place());
-    var transaction = new TransactionTemplate(transactionManager);
+    TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
     transaction.executeWithoutResult(
         status -> {
@@ -539,8 +547,8 @@ class PostgresPlaceSourceRepositoryTest {
     jdbc.update(
         "INSERT INTO place_source (place_id, provider, source_id) VALUES (?, 'TOUR_API', '002')",
         placeId);
-    try (var executor = Executors.newFixedThreadPool(4)) {
-      var futures =
+    try (ExecutorService executor = Executors.newFixedThreadPool(4)) {
+      List<Future<PlaceUpsertResult>> futures =
           IntStream.range(0, 8)
               .mapToObj(
                   index ->
@@ -551,7 +559,7 @@ class PostgresPlaceSourceRepositoryTest {
                                       normalized(index % 2 == 0 ? "001" : "002", "공원", null),
                                       image("https://example.com/shared.jpg")))))
               .toList();
-      for (var future : futures) {
+      for (Future<PlaceUpsertResult> future : futures) {
         assertThat(future.get(30, TimeUnit.SECONDS).placeId()).isEqualTo(placeId);
       }
     }
@@ -572,10 +580,10 @@ class PostgresPlaceSourceRepositoryTest {
     jdbc.update(
         "UPDATE external_place_raw SET payload = jsonb_set(payload, '{images}', CAST(? AS jsonb)) WHERE source_id = '001'",
         images);
-    var before = jdbc.queryForList("SELECT * FROM external_place_raw");
+    List<Map<String, Object>> before = jdbc.queryForList("SELECT * FROM external_place_raw");
 
-    var first = ingestionService.ingestAllTourApi(10);
-    var second = ingestionService.ingestAllTourApi(10);
+    PlaceIngestionResult first = ingestionService.ingestAllTourApi(10);
+    PlaceIngestionResult second = ingestionService.ingestAllTourApi(10);
 
     assertThat(first).isEqualTo(new PlaceIngestionResult(1, 1, 0, 0, 0, 0));
     assertThat(second).isEqualTo(first);
@@ -608,12 +616,12 @@ class PostgresPlaceSourceRepositoryTest {
     when(regions.findRegionId("11", "150")).thenReturn(Optional.of(regionId + 100000));
     rawStore.saveFailure("TOUR_API", "failed-raw", null, Reason.TRANSIENT);
     rawStore.saveSuccess("CULTURE", "other-provider", "{}", Instant.parse("2026-10-25T00:00:00Z"));
-    var before =
+    List<Map<String, Object>> before =
         jdbc.queryForList(
             "SELECT provider, source_id, payload::text, status, error_code, collected_at, updated_at FROM external_place_raw ORDER BY external_place_raw_id");
 
-    var first = ingestionService.ingestTourApi(10);
-    var second = ingestionService.ingestTourApi(10);
+    PlaceIngestionResult first = ingestionService.ingestTourApi(10);
+    PlaceIngestionResult second = ingestionService.ingestTourApi(10);
 
     assertThat(first).isEqualTo(new PlaceIngestionResult(6, 2, 1, 1, 1, 1));
     assertThat(second).isEqualTo(first);
@@ -633,7 +641,7 @@ class PostgresPlaceSourceRepositoryTest {
   /** 전체 적재를 하나의 외부 트랜잭션으로 감싸는 호출을 거부하는지 검증합니다. */
   @Test
   void ingestionCannotAccidentallyWrapAllPlacesInOneTransaction() {
-    var transaction = new TransactionTemplate(transactionManager);
+    TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
     assertThatThrownBy(
             () -> transaction.executeWithoutResult(status -> ingestionService.ingestTourApi(10)))
@@ -659,11 +667,11 @@ class PostgresPlaceSourceRepositoryTest {
     }
     when(regions.findRegionId("11", "140")).thenReturn(Optional.empty());
     when(regions.findRegionId("11", "150")).thenReturn(Optional.of(regionId + 100000));
-    var before =
+    List<Map<String, Object>> before =
         jdbc.queryForList("SELECT * FROM external_place_raw ORDER BY external_place_raw_id");
 
-    var first = ingestionService.ingestAllTourApi(4);
-    var second = ingestionService.ingestAllTourApi(4);
+    PlaceIngestionResult first = ingestionService.ingestAllTourApi(4);
+    PlaceIngestionResult second = ingestionService.ingestAllTourApi(4);
 
     assertThat(first).isEqualTo(new PlaceIngestionResult(25, 10, 1, 12, 1, 1));
     assertThat(second).isEqualTo(first);
@@ -682,7 +690,7 @@ class PostgresPlaceSourceRepositoryTest {
   /** PostgreSQL의 실제 지역 조회와 소개 정제를 거쳐 저장하고 미등록 지역은 보류하는지 확인합니다. */
   @Test
   void ingestsWithDatabaseRegionLookupAndPreservesNormalizedDescription() {
-    var lookup = new DatabasePlaceRegionQueryService(jdbc);
+    DatabasePlaceRegionQueryService lookup = new DatabasePlaceRegionQueryService(jdbc);
     when(regions.findRegionId("11", "110")).thenAnswer(call -> lookup.findRegionId("11", "110"));
     when(regions.findRegionId("11", "140")).thenAnswer(call -> lookup.findRegionId("11", "140"));
     successfulRaw("001", "VE030100", "110");
@@ -692,7 +700,7 @@ class PostgresPlaceSourceRepositoryTest {
         "<p>장소 소개 &amp; 안내</p>",
         "001");
 
-    var result = ingestionService.ingestTourApi(10);
+    PlaceIngestionResult result = ingestionService.ingestTourApi(10);
 
     assertThat(result).isEqualTo(new PlaceIngestionResult(2, 1, 0, 0, 1, 0));
     assertThat(jdbc.queryForObject("SELECT description FROM place", String.class))
@@ -705,13 +713,13 @@ class PostgresPlaceSourceRepositoryTest {
   void duplicateDatabaseRegionFailsOnePlaceAndContinuesWithNextRegion() {
     jdbc.update(
         "INSERT INTO region (sido_code, sigungu_code, sido_name, sigungu_name) VALUES ('11', '110', '서울특별시', '종로구'), ('11', '140', '서울특별시', '중구')");
-    var lookup = new DatabasePlaceRegionQueryService(jdbc);
+    DatabasePlaceRegionQueryService lookup = new DatabasePlaceRegionQueryService(jdbc);
     when(regions.findRegionId("11", "110")).thenAnswer(call -> lookup.findRegionId("11", "110"));
     when(regions.findRegionId("11", "140")).thenAnswer(call -> lookup.findRegionId("11", "140"));
     successfulRaw("001", "VE030100", "110");
     successfulRaw("002", "VE030100", "140");
 
-    var result = ingestionService.ingestTourApi(10);
+    PlaceIngestionResult result = ingestionService.ingestTourApi(10);
 
     assertThat(result).isEqualTo(new PlaceIngestionResult(2, 1, 0, 0, 0, 1));
     assertThat(jdbc.queryForList("SELECT source_id FROM place_source", String.class))
@@ -745,7 +753,7 @@ class PostgresPlaceSourceRepositoryTest {
    * @return 지정한 장소명과 소개를 포함하는 정상 정제 결과
    */
   private PlaceNormalizationResult normalized(String sourceId, String name, String description) {
-    var place =
+    NormalizedPlace place =
         new NormalizedPlace(
             name,
             "서울 종로구",
@@ -768,8 +776,8 @@ class PostgresPlaceSourceRepositoryTest {
    * @return 이미지 목록을 교체한 불변 결과
    */
   private PlaceNormalizationResult withImages(PlaceNormalizationResult result, Image... images) {
-    var place = result.place();
-    var changed =
+    NormalizedPlace place = result.place();
+    NormalizedPlace changed =
         new NormalizedPlace(
             place.name(),
             place.address(),

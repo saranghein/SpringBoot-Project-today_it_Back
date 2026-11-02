@@ -7,10 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.todayit.place.client.external.PlaceDataSource;
 import com.todayit.place.client.external.PlaceDataSource.Component;
+import com.todayit.place.client.external.PlaceDataSource.SourceComponent;
 import com.todayit.place.client.external.PlaceDataSource.SourceComponentRequest;
 import com.todayit.place.client.external.PlaceDataSource.SourcePage;
 import com.todayit.place.client.external.PlaceDataSource.SourcePageRequest;
 import com.todayit.place.client.external.PlaceSourceConfiguration;
+import java.util.Collection;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -32,7 +34,8 @@ class PlaceSourceSmokeTest {
         .run(
             context -> {
               assertTrue(context.getStartupFailure() == null, "외부 연동 설정 초기화 실패");
-              var sources = context.getBeansOfType(PlaceDataSource.class).values();
+              Collection<PlaceDataSource> sources =
+                  context.getBeansOfType(PlaceDataSource.class).values();
               assertFalse(sources.isEmpty(), "공급원 ENABLED 설정과 SERVICE_KEY 환경 변수를 등록해야 합니다.");
               assertAll(sources.stream().map(source -> () -> verify(source)));
             });
@@ -63,12 +66,13 @@ class PlaceSourceSmokeTest {
     }
     String sourceId = first.items().getFirst().sourceId();
     for (Component component : source.capabilities().individualComponents()) {
-      var detailFilters =
+      Map<String, String> detailFilters =
           provider.equals("TOUR_API") && component == Component.INTRODUCTION
               ? Map.of("contentTypeId", "12")
               : Map.<String, String>of();
-      var request = new SourceComponentRequest(sourceId, component, detailFilters);
-      var detail = source.fetchComponent(request);
+      SourceComponentRequest request =
+          new SourceComponentRequest(sourceId, component, detailFilters);
+      SourceComponent detail = source.fetchComponent(request);
       PlaceSourceSmokeVerifier.verify(source.sourceKey(), request, detail);
     }
     for (Component component : source.capabilities().pagedComponents()) {

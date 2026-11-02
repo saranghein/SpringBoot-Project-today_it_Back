@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,8 +42,8 @@ class PlaceSourceLinkMigrationTest {
         .target("13")
         .load()
         .migrate();
-    try (var connection = open();
-        var statement = connection.createStatement()) {
+    try (Connection connection = open();
+        Statement statement = connection.createStatement()) {
       statement.executeUpdate(
           """
           INSERT INTO place (name, latitude, longitude, address, category, view_count, is_active, is_deleted)
@@ -57,9 +60,9 @@ class PlaceSourceLinkMigrationTest {
         .locations("classpath:db/migration")
         .load()
         .migrate();
-    try (var connection = open();
-        var statement = connection.createStatement()) {
-      try (var rows = statement.executeQuery("SELECT count(*) FROM place_source")) {
+    try (Connection connection = open();
+        Statement statement = connection.createStatement()) {
+      try (ResultSet rows = statement.executeQuery("SELECT count(*) FROM place_source")) {
         rows.next();
         assertThat(rows.getInt(1)).isZero();
       }
@@ -102,8 +105,8 @@ class PlaceSourceLinkMigrationTest {
    */
   @Test
   void preservesExistingPlacesAndRelatedImages() throws SQLException {
-    try (var statement = connection.createStatement();
-        var rows =
+    try (Statement statement = connection.createStatement();
+        ResultSet rows =
             statement.executeQuery(
                 """
         SELECT p.place_id, p.name, p.view_count, p.is_active, s.provider, s.source_id
@@ -228,7 +231,7 @@ class PlaceSourceLinkMigrationTest {
   void linkedPlaceCannotBePhysicallyDeletedSilently() {
     assertThatThrownBy(
             () -> {
-              try (var statement = connection.createStatement()) {
+              try (Statement statement = connection.createStatement()) {
                 statement.executeUpdate("DELETE FROM place_image WHERE place_id = 1");
                 statement.executeUpdate("DELETE FROM place WHERE place_id = 1");
               }
@@ -247,7 +250,7 @@ class PlaceSourceLinkMigrationTest {
    * @throws SQLException 테스트 DB 준비·조회·변경에 실패할 때
    */
   private void link(int placeId, String provider, String sourceId) throws SQLException {
-    try (var statement =
+    try (PreparedStatement statement =
         connection.prepareStatement(
             "INSERT INTO place_source (place_id, provider, source_id) VALUES (?, ?, ?)")) {
       statement.setInt(1, placeId);
@@ -265,8 +268,8 @@ class PlaceSourceLinkMigrationTest {
    * @throws SQLException 테스트 DB 준비·조회·변경에 실패할 때
    */
   private long count(String sql) throws SQLException {
-    try (var statement = connection.createStatement();
-        var rows = statement.executeQuery(sql)) {
+    try (Statement statement = connection.createStatement();
+        ResultSet rows = statement.executeQuery(sql)) {
       rows.next();
       return rows.getLong(1);
     }

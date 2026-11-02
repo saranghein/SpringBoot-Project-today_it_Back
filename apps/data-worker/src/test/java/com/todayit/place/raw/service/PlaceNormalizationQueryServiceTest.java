@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.todayit.place.raw.service.model.PlaceNormalizationResult;
 import com.todayit.place.raw.service.model.RawPlaceSnapshot;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -15,12 +16,14 @@ class PlaceNormalizationQueryServiceTest {
   /** 성공 원본만 정제하여 사유를 반환하고 원본은 갱신하지 않는지 검증합니다. */
   @Test
   void previewsOnlySuccessfulSnapshotsAndReturnsReasonsWithoutUpdatingSource() {
-    var query = mock(ExternalPlaceRawQueryService.class);
-    var snapshot = new RawPlaceSnapshot(1, "TOUR_API", "001", "SUCCESS", "invalid-json");
+    ExternalPlaceRawQueryService query = mock(ExternalPlaceRawQueryService.class);
+    RawPlaceSnapshot snapshot =
+        new RawPlaceSnapshot(1, "TOUR_API", "001", "SUCCESS", "invalid-json");
     when(query.findSucceeded("TOUR_API", 10)).thenReturn(List.of(snapshot));
-    var service = new PlaceNormalizationQueryService(query, new TourApiPlaceNormalizationService());
+    PlaceNormalizationQueryService service =
+        new PlaceNormalizationQueryService(query, new TourApiPlaceNormalizationService());
 
-    var results = service.previewTourApi(10);
+    List<PlaceNormalizationResult> results = service.previewTourApi(10);
 
     assertThat(results).hasSize(1);
     assertThat(results.getFirst().status())
@@ -34,10 +37,10 @@ class PlaceNormalizationQueryServiceTest {
   /** 성공 원본이 없으면 빈 정제 미리보기를 반환하는지 검증합니다. */
   @Test
   void noSuccessfulRowsReturnsEmptyPreview() {
-    var query = mock(ExternalPlaceRawQueryService.class);
+    ExternalPlaceRawQueryService query = mock(ExternalPlaceRawQueryService.class);
     when(query.findSucceeded("TOUR_API", 10)).thenReturn(List.of());
 
-    var results =
+    List<PlaceNormalizationResult> results =
         new PlaceNormalizationQueryService(query, new TourApiPlaceNormalizationService())
             .previewTourApi(10);
 

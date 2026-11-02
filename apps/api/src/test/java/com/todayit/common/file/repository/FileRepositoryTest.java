@@ -6,6 +6,7 @@ import com.todayit.common.file.entity.File;
 import com.todayit.common.file.entity.File.FileSnapshot;
 import com.todayit.common.file.entity.FileRelatedType;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +28,7 @@ class FileRepositoryTest {
   @DisplayName("마이그레이션 스키마에서 파일 사용처와 MIME 유형 및 생성 시각을 저장하고 복원한다")
   void persistsRelatedTypeMimeTypeAndTimestampThroughMigrationSchema() {
     // given
-    var file =
+    File file =
         new File(
             FileRelatedType.INQUIRY_ATTACHMENT,
             "23",
@@ -37,14 +38,14 @@ class FileRepositoryTest {
             123);
 
     // when
-    var saved = files.saveAndFlush(file);
+    File saved = files.saveAndFlush(file);
     long id = saved.getSnapshot().fileId();
     entities.clear();
     FileSnapshot restored = files.findById(id).orElseThrow().getSnapshot();
     String mimeType =
         jdbc.queryForObject(
             "SELECT mime_type FROM \"todayit\".file WHERE file_id = ?", String.class, id);
-    var attached =
+    List<File> attached =
         files.findByRelatedTypeAndRelatedIdOrderByFileIdAsc(
             FileRelatedType.INQUIRY_ATTACHMENT, "23");
 

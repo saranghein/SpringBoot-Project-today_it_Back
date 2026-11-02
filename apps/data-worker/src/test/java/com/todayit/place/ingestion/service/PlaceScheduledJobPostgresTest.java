@@ -14,11 +14,15 @@ import com.todayit.place.ingestion.service.PlaceScheduledJobService.JobType;
 import com.todayit.place.ingestion.service.model.PlaceIngestionResult;
 import com.todayit.place.raw.service.TourApiCollectionPlanService;
 import com.todayit.place.raw.service.model.RawCollectionResult;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -84,10 +88,10 @@ class PlaceScheduledJobPostgresTest {
 
     assertThat(jobs.execute(JobType.COLLECT_AND_INGEST)).isTrue();
 
-    var order = inOrder(collection, ingestion);
+    InOrder order = inOrder(collection, ingestion);
     order.verify(collection).collect(anyList(), eq(10), eq(true));
     order.verify(ingestion).ingestAllTourApi(10);
-    var row =
+    Map<String, Object> row =
         jdbc.queryForMap(
             "SELECT status, error_code, finished_at, collection_result->>'succeeded' AS collected, ingestion_result->>'stored' AS stored FROM place_job_run");
     assertThat(row)
@@ -164,11 +168,11 @@ class PlaceScheduledJobPostgresTest {
    */
   @Test
   void lockPreventsOverlapWithoutKeepingDatabaseTransactionOpen() throws Exception {
-    var entered = new CountDownLatch(1);
-    var release = new CountDownLatch(1);
-    var outsider = independentLock();
-    try (var executor = Executors.newSingleThreadExecutor()) {
-      var running =
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    PlaceJobLock outsider = independentLock();
+    try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+      Future<Boolean> running =
           executor.submit(
               () ->
                   lock.runIfAvailable(

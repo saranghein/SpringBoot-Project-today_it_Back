@@ -7,9 +7,11 @@ import com.todayit.common.file.entity.File;
 import com.todayit.common.file.entity.FileRelatedType;
 import com.todayit.common.file.exception.FileErrorCode;
 import com.todayit.common.file.exception.FileException;
+import com.todayit.common.file.service.model.FileResult;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.DisplayName;
@@ -40,7 +42,7 @@ class FileConcurrencyTest {
   @Test
   @DisplayName("같은 문의에 최초 업로드 6개가 동시에 요청되어도 5개까지만 저장한다")
   void concurrentFirstUploadsCannotExceedFiveInquiryAttachments() throws Exception {
-    try (var executor = Executors.newFixedThreadPool(6)) {
+    try (ExecutorService executor = Executors.newFixedThreadPool(6)) {
       // given
       CountDownLatch start = new CountDownLatch(1);
       List<Future<Throwable>> attempts = new ArrayList<>();
@@ -71,7 +73,8 @@ class FileConcurrencyTest {
       for (Future<Throwable> attempt : attempts) {
         results.add(attempt.get());
       }
-      var attached = metadata.findAll(FileRelatedType.INQUIRY_ATTACHMENT, "concurrent-inquiry");
+      List<FileResult> attached =
+          metadata.findAll(FileRelatedType.INQUIRY_ATTACHMENT, "concurrent-inquiry");
 
       // then
       assertThat(results).filteredOn(result -> result == null).hasSize(5);

@@ -34,7 +34,7 @@ class PlaceScheduleConfigurationTest {
   /** 정상 설정에서는 저장소 준비를 확인하고 생성 자체로는 작업하지 않는지 확인합니다. */
   @Test
   void validConfigurationVerifiesDatabaseButDoesNotExecuteOnConstruction() {
-    var config =
+    PlaceScheduleConfiguration config =
         new PlaceScheduleConfiguration(
             schedule,
             collection(false),
@@ -104,7 +104,7 @@ class PlaceScheduleConfigurationTest {
   /** 잘못된 cron·시간대·전체 작업 비활성 설정을 시작 전에 거부하는지 확인합니다. */
   @Test
   void invalidClockSettingsFailBeforeDatabase() {
-    for (var invalid :
+    for (PlaceScheduleProperties invalid :
         List.of(
             new PlaceScheduleProperties(true, "bad", "-", "Asia/Seoul"),
             new PlaceScheduleProperties(true, "-", "-", "Asia/Seoul"),
@@ -126,7 +126,7 @@ class PlaceScheduleConfigurationTest {
 
   @Test
   void nationwideIgnoresUnusedSingleScopeSettings() {
-    var unusedScope =
+    RawCollectionProperties unusedScope =
         new RawCollectionProperties(
             false,
             10,
@@ -151,7 +151,7 @@ class PlaceScheduleConfigurationTest {
 
   @Test
   void nationwideRejectsManualTargetsBeforeDatabaseAndExecution() {
-    var manualTargets =
+    RawCollectionProperties manualTargets =
         new RawCollectionProperties(
             false,
             10,
@@ -178,7 +178,7 @@ class PlaceScheduleConfigurationTest {
 
   @Test
   void manualCollectionStillRejectsInvalidSingleScopeBeforeDatabaseAndExecution() {
-    var invalidScope =
+    RawCollectionProperties invalidScope =
         new RawCollectionProperties(
             false, 10, RawCollectionProperties.Mode.FULL, "invalid", "", "12", List.of());
 

@@ -75,7 +75,7 @@ class DatabasePlaceRegionQueryServiceTest {
   /** 실제 조회 구현이 적재 기능을 켰을 때만 Spring Bean으로 연결되는지 확인합니다. */
   @Test
   void registersOnlyWhenUpsertIsEnabled() {
-    var contextRunner =
+    ApplicationContextRunner contextRunner =
         new ApplicationContextRunner()
             .withUserConfiguration(DatabasePlaceRegionQueryService.class)
             .withBean(JdbcTemplate.class, () -> jdbc);

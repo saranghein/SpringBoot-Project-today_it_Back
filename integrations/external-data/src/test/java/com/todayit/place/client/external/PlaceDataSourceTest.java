@@ -10,7 +10,9 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.sun.net.httpserver.HttpServer;
 import com.todayit.place.client.external.PlaceDataSource.Component;
+import com.todayit.place.client.external.PlaceDataSource.SourceComponent;
 import com.todayit.place.client.external.PlaceDataSource.SourceComponentRequest;
+import com.todayit.place.client.external.PlaceDataSource.SourcePage;
 import com.todayit.place.client.external.PlaceDataSource.SourcePageRequest;
 import com.todayit.place.client.external.PlaceSourceException.Reason;
 import com.todayit.place.client.external.culture.CulturePlaceDataSource;
@@ -18,6 +20,7 @@ import com.todayit.place.client.external.redtable.RedtablePlaceDataSource;
 import com.todayit.place.client.external.support.PlaceSourceCallLogger;
 import com.todayit.place.client.external.support.PlaceSourceHttpClient;
 import com.todayit.place.client.external.tourapi.TourApiPlaceDataSource;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -67,12 +70,12 @@ class PlaceDataSourceTest {
           byte[] bytes = responseBody.get().getBytes(StandardCharsets.UTF_8);
           exchange.getResponseHeaders().set("Content-Type", "text/plain;charset=UTF-8");
           exchange.sendResponseHeaders(status.get(), bytes.length);
-          try (var output = exchange.getResponseBody()) {
+          try (OutputStream output = exchange.getResponseBody()) {
             output.write(bytes);
           }
         });
     server.start();
-    var http =
+    PlaceSourceHttpClient http =
         new PlaceSourceHttpClient(
             WebClient.create(),
             "http://127.0.0.1:" + server.getAddress().getPort(),
@@ -93,7 +96,7 @@ class PlaceDataSourceTest {
   /** TourAPI 원천 필드를 보존하고 Decoding 키를 한 번만 인코딩하는지 검증합니다. */
   @Test
   void tourPreservesRawFieldsAndEncodesDecodedKeyExactlyOnce() {
-    var result = tour.fetchPage(page(Component.BASIC, "", 1, Map.of("lDongRegnCd", "11")));
+    SourcePage result = tour.fetchPage(page(Component.BASIC, "", 1, Map.of("lDongRegnCd", "11")));
 
     assertThat(result.items().getFirst().sourceId()).isEqualTo("00012");
     assertThat(result.items().getFirst().payloadJson()).contains("장소");
@@ -108,7 +111,7 @@ class PlaceDataSourceTest {
   @Test
   void resumedPageUsesRequestedCursorAndTerminates() {
     responseBody.set(tourPage("[{\"contentid\":\"8\"}]", 2, 1, 2));
-    var result = tour.fetchPage(page(Component.BASIC, "v1:2", 1, Map.of()));
+    SourcePage result = tour.fetchPage(page(Component.BASIC, "v1:2", 1, Map.of()));
     assertThat(result.nextCursor()).isEmpty();
     assertThat(requestedUri.get().getQuery()).contains("pageNo=2");
   }
@@ -128,7 +131,7 @@ class PlaceDataSourceTest {
             reportedRows,
             77));
 
-    var result = tour.fetchPage(page(Component.BASIC, "v1:77", 10, Map.of()));
+    SourcePage result = tour.fetchPage(page(Component.BASIC, "v1:77", 10, Map.of()));
 
     assertThat(result.items()).hasSize(7);
     assertThat(result.nextCursor()).isEmpty();
@@ -140,7 +143,7 @@ class PlaceDataSourceTest {
   @Test
   void tourEmptyListAllowsZeroReportedRows() {
     responseBody.set(tourPage("[]", 0, 0, 1));
-    var result = tour.fetchPage(page(Component.BASIC, "", 10, Map.of()));
+    SourcePage result = tour.fetchPage(page(Component.BASIC, "", 10, Map.of()));
     assertThat(result.items()).isEmpty();
     assertThat(result.nextCursor()).isEmpty();
   }
@@ -165,7 +168,7 @@ class PlaceDataSourceTest {
   @Test
   void successfulEmptyTourListIsNotAnError() {
     responseBody.set(tourPage("[]", 0, 10, 1));
-    var result = tour.fetchPage(page(Component.BASIC, "", 10, Map.of()));
+    SourcePage result = tour.fetchPage(page(Component.BASIC, "", 10, Map.of()));
     assertThat(result.items()).isEmpty();
     assertThat(result.nextCursor()).isEmpty();
   }
@@ -180,18 +183,18 @@ class PlaceDataSourceTest {
   @CsvSource({"BASIC,/detailCommon2", "INTRODUCTION,/detailIntro2", "IMAGES,/detailImage2"})
   void tourFetchesEachComponent(Component component, String path) {
     responseBody.set(tourPage("[{\"contentid\":\"7\",\"overview\":\"소개\"}]", 1, 1000, 1));
-    var result =
+    SourceComponent result =
         tour.fetchComponent(
             new SourceComponentRequest(
                 "7",
                 component,
                 component == Component.INTRODUCTION ? Map.of("contentTypeId", "12") : Map.of()));
     assertThat(requestedUri.get().getPath()).isEqualTo(path);
-    var parameterNames =
+    List<String> parameterNames =
         List.of(requestedUri.get().getRawQuery().split("&")).stream()
             .map(parameter -> parameter.substring(0, parameter.indexOf('=')))
             .toList();
-    var expectedNames =
+    ArrayList<String> expectedNames =
         new ArrayList<>(
             List.of(
                 "MobileOS",
@@ -298,7 +301,7 @@ class PlaceDataSourceTest {
   void httpStatusIsSanitizedAndNeverRetriedInsideAdapter(int responseStatus, Reason reason) {
     status.set(responseStatus);
     responseBody.set(TEST_KEY);
-    var failure =
+    PlaceSourceException failure =
         assertReason(reason, () -> tour.fetchPage(page(Component.BASIC, "", 10, Map.of())));
     assertThat(failure.getMessage()).doesNotContain(TEST_KEY, "http", "serviceKey");
     assertThat(failure.getCause()).isNull();
@@ -325,7 +328,7 @@ class PlaceDataSourceTest {
   void redtableUsesDocumentedBulkEndpointsAndServerPageSize(Component component, String path) {
     responseBody.set(
         "{\"header\":{\"resultCode\":\"00\",\"totalCount\":4,\"numOfRows\":2,\"pageNo\":1},\"body\":[{\"RSTR_ID\":7},{\"RSTR_ID\":7}]}");
-    var result = redtable.fetchPage(page(component, "", 10, Map.of()));
+    SourcePage result = redtable.fetchPage(page(component, "", 10, Map.of()));
     assertThat(result.items()).hasSize(2);
     assertThat(result.nextCursor()).isEqualTo("v1:2");
     assertThat(requestedUri.get().getPath()).isEqualTo(path);
@@ -347,7 +350,8 @@ class PlaceDataSourceTest {
   void cultureParsesDocumentedFacilityXmlAndKeepsFacilityId() {
     responseBody.set(
         "<response><header><reseultCode>00</reseultCode></header><body><totalCount>1</totalCount><PageNo>1</PageNo><numOfrows>10</numOfrows><items><item><seq>0007</seq><culName>문화시설</culName></item></items></body></response>");
-    var result = culture.fetchPage(page(Component.BASIC, "", 10, Map.of("facility", "artgallery")));
+    SourcePage result =
+        culture.fetchPage(page(Component.BASIC, "", 10, Map.of("facility", "artgallery")));
     assertThat(result.items().getFirst().sourceId()).isEqualTo("0007");
     assertThat(result.items().getFirst().payloadJson()).contains("문화시설");
     assertThat(requestedUri.get().getPath()).isEqualTo("/artgallery");
@@ -427,18 +431,19 @@ class PlaceDataSourceTest {
   /** 요청 시간 초과 시 인증 정보가 포함될 수 있는 전송 예외를 노출하지 않는지 검증합니다. */
   @Test
   void timeoutDoesNotExposeTransportException() {
-    var webClient = WebClient.builder().exchangeFunction(request -> Mono.never()).build();
-    var http =
+    WebClient webClient = WebClient.builder().exchangeFunction(request -> Mono.never()).build();
+    PlaceSourceHttpClient http =
         new PlaceSourceHttpClient(
             webClient, "https://example.invalid", TEST_KEY, Duration.ofMillis(20));
-    var failure = assertReason(Reason.TRANSIENT, () -> http.get("/list", Map.of()));
+    PlaceSourceException failure =
+        assertReason(Reason.TRANSIENT, () -> http.get("/list", Map.of()));
     assertThat(failure.getCause()).isNull();
   }
 
   /** 발급키가 없으면 네트워크 요청 없이 인증 실패로 처리하는지 검증합니다. */
   @Test
   void missingKeyFailsWithoutNetwork() {
-    var http =
+    PlaceSourceHttpClient http =
         new PlaceSourceHttpClient(
             WebClient.create(),
             "http://127.0.0.1:" + server.getAddress().getPort(),
@@ -453,17 +458,17 @@ class PlaceDataSourceTest {
   void oversizedHttpBodyIsInvalidResponseRatherThanTransientFailure() {
     responseBody.set(
         tourPage("[{\"contentid\":\"7\",\"title\":\"fixture-private-payload\"}]", 1, 1, 1));
-    var client =
+    WebClient client =
         WebClient.builder().codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(32)).build();
-    var http =
+    PlaceSourceHttpClient http =
         new PlaceSourceHttpClient(
             client,
             "http://127.0.0.1:" + server.getAddress().getPort(),
             TEST_KEY,
             Duration.ofSeconds(3));
-    var source = new TourApiPlaceDataSource(http, "TodayItTest");
+    TourApiPlaceDataSource source = new TourApiPlaceDataSource(http, "TodayItTest");
 
-    var failure =
+    PlaceSourceException failure =
         assertReason(
             Reason.INVALID_RESPONSE,
             () -> source.fetchPage(page(Component.BASIC, "", 1, Map.of())));
@@ -479,7 +484,7 @@ class PlaceDataSourceTest {
   void sourceLogsContainOnlySafeSummaryAndNoThrowable() {
     Logger logger = (Logger) LoggerFactory.getLogger(PlaceSourceCallLogger.class);
     Level previousLevel = logger.getLevel();
-    var appender = new ListAppender<ILoggingEvent>();
+    ListAppender<ILoggingEvent> appender = new ListAppender<ILoggingEvent>();
     appender.start();
     logger.addAppender(appender);
     logger.setLevel(Level.INFO);
@@ -504,7 +509,7 @@ class PlaceDataSourceTest {
       assertThat(appender.list.get(1).getLevel()).isEqualTo(Level.WARN);
       assertThat(appender.list.get(1).getFormattedMessage())
           .contains("place_source_failure", "외부 조회 실패", "사유=TRANSIENT");
-      for (var event : appender.list) {
+      for (ILoggingEvent event : appender.list) {
         assertThat(event.getFormattedMessage())
             .doesNotContain(TEST_KEY, "serviceKey", "127.0.0.1", "fixture-private-payload");
         assertThat(event.getThrowableProxy()).isNull();
@@ -519,8 +524,9 @@ class PlaceDataSourceTest {
   /** 공급원·데이터셋 쌍으로 구현을 선택하고 중복 등록을 거부하는지 검증합니다. */
   @Test
   void registrySelectsByNamespaceAndRejectsDuplicates() {
-    var sources = new ArrayList<PlaceDataSource>(List.of(tour, redtable, culture));
-    var registry = new PlaceDataSourceRegistry(sources);
+    ArrayList<PlaceDataSource> sources =
+        new ArrayList<PlaceDataSource>(List.of(tour, redtable, culture));
+    PlaceDataSourceRegistry registry = new PlaceDataSourceRegistry(sources);
     sources.clear();
     assertThat(registry.get(tour.sourceKey())).isSameAs(tour);
     assertThatThrownBy(() -> new PlaceDataSourceRegistry(List.of(tour, tour)))
@@ -601,7 +607,7 @@ class PlaceDataSourceTest {
    * @throws AssertionError 호출이 실패하지 않거나 오류 분류가 다를 때
    */
   private PlaceSourceException assertReason(Reason reason, Runnable action) {
-    var failure = assertThrows(PlaceSourceException.class, action::run);
+    PlaceSourceException failure = assertThrows(PlaceSourceException.class, action::run);
     assertThat(failure.getReason()).isEqualTo(reason);
     return failure;
   }

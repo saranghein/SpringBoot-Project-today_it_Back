@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.todayit.place.raw.config.RawCollectionProperties.Mode;
+import com.todayit.place.raw.config.RawCollectionProperties.Target;
 import com.todayit.place.raw.service.PlaceNormalizationQueryService;
 import com.todayit.place.raw.service.TourApiCollectionPlanService;
 import com.todayit.place.raw.service.TourApiCollectionTargetQueryService;
@@ -15,6 +16,7 @@ import com.todayit.place.raw.service.command.TourApiCollectionScope;
 import com.todayit.place.raw.service.model.RawCollectionResult;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -68,10 +70,10 @@ class TourApiRawCollectionRunnerTest {
   /** 일부 원본 수집 실패가 있으면 명시적 실행도 실패하는지 검증합니다. */
   @Test
   void partialFailureMakesExplicitExecutionFail() {
-    var service = mock(TourApiRawCollectionService.class);
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
     when(service.collectSample(10, TourApiCollectionScope.seoulAttractions()))
         .thenReturn(new RawCollectionResult(2, 1, 1));
-    var runner = runner(service, Mode.SAMPLE);
+    TourApiRawCollectionRunner runner = runner(service, Mode.SAMPLE);
 
     assertThatThrownBy(() -> runner.run(new DefaultApplicationArguments()))
         .isInstanceOf(IllegalStateException.class)
@@ -81,9 +83,9 @@ class TourApiRawCollectionRunnerTest {
   /** 재수집 모드가 신규 표본 수집을 호출하지 않는지 검증합니다. */
   @Test
   void retryModeDoesNotRunSampleCollection() {
-    var service = mock(TourApiRawCollectionService.class);
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
     when(service.retryFailed(10)).thenReturn(new RawCollectionResult(1, 1, 0));
-    var runner = runner(service, Mode.RETRY_FAILED);
+    TourApiRawCollectionRunner runner = runner(service, Mode.RETRY_FAILED);
 
     runner.run(new DefaultApplicationArguments());
 
@@ -97,9 +99,9 @@ class TourApiRawCollectionRunnerTest {
   /** 재수집 대상이 없으면 정상 종료하는지 검증합니다. */
   @Test
   void retryModeWithNoTargetsCompletesNormally() {
-    var service = mock(TourApiRawCollectionService.class);
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
     when(service.retryFailed(10)).thenReturn(new RawCollectionResult(0, 0, 0));
-    var runner = runner(service, Mode.RETRY_FAILED);
+    TourApiRawCollectionRunner runner = runner(service, Mode.RETRY_FAILED);
 
     runner.run(new DefaultApplicationArguments());
   }
@@ -107,9 +109,9 @@ class TourApiRawCollectionRunnerTest {
   /** 원본 재수집 실패가 실행 실패로 전파되는지 검증합니다. */
   @Test
   void retryFailureMakesExecutionFail() {
-    var service = mock(TourApiRawCollectionService.class);
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
     when(service.retryFailed(10)).thenReturn(new RawCollectionResult(1, 0, 1));
-    var runner = runner(service, Mode.RETRY_FAILED);
+    TourApiRawCollectionRunner runner = runner(service, Mode.RETRY_FAILED);
 
     assertThatThrownBy(() -> runner.run(new DefaultApplicationArguments()))
         .isInstanceOf(IllegalStateException.class)
@@ -136,9 +138,9 @@ class TourApiRawCollectionRunnerTest {
   /** 정제 모드에서 저장 없이 미리보기만 호출하는지 검증합니다. */
   @Test
   void normalizationModeOnlyCallsReadOnlyPreview() {
-    var collection = mock(TourApiRawCollectionService.class);
-    var normalization = mock(PlaceNormalizationQueryService.class);
-    var runner =
+    TourApiRawCollectionService collection = mock(TourApiRawCollectionService.class);
+    PlaceNormalizationQueryService normalization = mock(PlaceNormalizationQueryService.class);
+    TourApiRawCollectionRunner runner =
         new TourApiRawCollectionRunner(
             collection,
             new RawCollectionProperties(true, 10, Mode.NORMALIZE, "11", "", "12", List.of()),
@@ -169,7 +171,7 @@ class TourApiRawCollectionRunnerTest {
   /** 전체 순회 후 개별 상세 실패가 있으면 최종 실행을 실패시키는지 확인합니다. */
   @Test
   void fullModeRunsAllPagesAndFailsOnIndividualCollectionFailure() {
-    var service = mock(TourApiRawCollectionService.class);
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
     when(service.collectAll(10, TourApiCollectionScope.seoulAttractions()))
         .thenReturn(new RawCollectionResult(25, 24, 1));
 
@@ -182,8 +184,8 @@ class TourApiRawCollectionRunnerTest {
   /** 지역·타입 설정을 바인딩하고 FULL 수집에 전달하는지 확인합니다. */
   @Test
   void bindsDistrictAndTypeAndPassesSelectedScopeToFullCollection() {
-    var service = mock(TourApiRawCollectionService.class);
-    var scope = new TourApiCollectionScope("26", "110", "39");
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
+    TourApiCollectionScope scope = new TourApiCollectionScope("26", "110", "39");
     when(service.collectAll(10, scope)).thenReturn(new RawCollectionResult(1, 1, 0));
     new ApplicationContextRunner()
         .withUserConfiguration(TourApiRawCollectionRunner.class, TourApiCollectionPlanService.class)
@@ -208,8 +210,8 @@ class TourApiRawCollectionRunnerTest {
   /** 잘못된 수집 범위는 외부 조회 전에 거부하는지 확인합니다. */
   @Test
   void invalidScopeDoesNotStartExternalCollection() {
-    var service = mock(TourApiRawCollectionService.class);
-    var runner =
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
+    TourApiRawCollectionRunner runner =
         new TourApiRawCollectionRunner(
             service,
             new RawCollectionProperties(true, 10, Mode.SAMPLE, "", "110", "39", List.of()),
@@ -223,9 +225,9 @@ class TourApiRawCollectionRunnerTest {
   /** 목록 설정이 기존 단일 설정을 덮어쓰고 지정 순서와 생략 시군구 기본값을 유지하는지 확인합니다. */
   @Test
   void targetListOverridesSingleSettingsAndRunsInConfiguredOrder() {
-    var service = mock(TourApiRawCollectionService.class);
-    var first = new TourApiCollectionScope("26", "110", "39");
-    var second = new TourApiCollectionScope("11", "", "14");
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
+    TourApiCollectionScope first = new TourApiCollectionScope("26", "110", "39");
+    TourApiCollectionScope second = new TourApiCollectionScope("11", "", "14");
     when(service.collectAll(10, first)).thenReturn(new RawCollectionResult(1, 1, 0));
     when(service.collectAll(10, second)).thenReturn(new RawCollectionResult(2, 2, 0));
     new ApplicationContextRunner()
@@ -251,7 +253,7 @@ class TourApiRawCollectionRunnerTest {
                   .getBean(TourApiRawCollectionRunner.class)
                   .run(new DefaultApplicationArguments());
             });
-    var order = org.mockito.Mockito.inOrder(service);
+    InOrder order = org.mockito.Mockito.inOrder(service);
     order.verify(service).collectAll(10, first);
     order.verify(service).collectAll(10, second);
     org.mockito.Mockito.verifyNoMoreInteractions(service);
@@ -260,12 +262,13 @@ class TourApiRawCollectionRunnerTest {
   /** 뒤쪽 항목 오류나 중복을 첫 대상의 외부 조회 전에 거부하는지 확인합니다. */
   @Test
   void invalidLaterTargetAndDuplicateAreRejectedBeforeFirstExternalCall() {
-    var service = mock(TourApiRawCollectionService.class);
-    var valid = new RawCollectionProperties.Target("26", "110", "39");
-    var invalid = new RawCollectionProperties.Target("11", "", "invalid");
-    for (var targets : List.of(List.of(valid, invalid), List.of(valid, valid))) {
-      var properties = new RawCollectionProperties(true, 10, Mode.FULL, "11", "", "12", targets);
-      var runner =
+    TourApiRawCollectionService service = mock(TourApiRawCollectionService.class);
+    Target valid = new RawCollectionProperties.Target("26", "110", "39");
+    Target invalid = new RawCollectionProperties.Target("11", "", "invalid");
+    for (List<Target> targets : List.of(List.of(valid, invalid), List.of(valid, valid))) {
+      RawCollectionProperties properties =
+          new RawCollectionProperties(true, 10, Mode.FULL, "11", "", "12", targets);
+      TourApiRawCollectionRunner runner =
           new TourApiRawCollectionRunner(
               service,
               properties,

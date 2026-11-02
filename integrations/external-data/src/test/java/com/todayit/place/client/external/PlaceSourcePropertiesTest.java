@@ -2,13 +2,16 @@ package com.todayit.place.client.external;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.todayit.place.client.external.PlaceSourceProperties.ProviderProperties;
 import com.todayit.place.client.external.culture.CulturePlaceDataSource;
 import com.todayit.place.client.external.redtable.RedtablePlaceDataSource;
 import com.todayit.place.client.external.tourapi.TourApiPlaceDataSource;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** 공급원 설정 기본값과 바인딩·제한 시간 및 메타데이터 생성을 검증합니다. */
@@ -23,12 +26,12 @@ class PlaceSourcePropertiesTest {
     contextRunner.run(
         context -> {
           assertThat(context).hasNotFailed().hasSingleBean(PlaceSourceProperties.class);
-          var properties = context.getBean(PlaceSourceProperties.class);
+          PlaceSourceProperties properties = context.getBean(PlaceSourceProperties.class);
           assertThat(properties.tourapi().enabled()).isFalse();
           assertThat(properties.tourapi().serviceKey()).isEmpty();
           assertThat(properties.tourapi().timeout()).isEqualTo(Duration.ofSeconds(30));
           assertThat(properties.tourapi().mobileApp()).isEqualTo("TodayIt");
-          for (var provider :
+          for (ProviderProperties provider :
               new PlaceSourceProperties.ProviderProperties[] {
                 properties.redtable(), properties.culture()
               }) {
@@ -62,7 +65,7 @@ class PlaceSourcePropertiesTest {
                   .hasSingleBean(TourApiPlaceDataSource.class)
                   .hasSingleBean(RedtablePlaceDataSource.class)
                   .hasSingleBean(CulturePlaceDataSource.class);
-              var properties = context.getBean(PlaceSourceProperties.class);
+              PlaceSourceProperties properties = context.getBean(PlaceSourceProperties.class);
               assertThat(properties.tourapi().enabled()).isTrue();
               assertThat(properties.tourapi().serviceKey()).isEqualTo("tour-fixture");
               assertThat(properties.tourapi().timeout()).isEqualTo(Duration.ofMillis(250));
@@ -109,13 +112,13 @@ class PlaceSourcePropertiesTest {
    */
   @Test
   void generatesMetadataForAllProviderSettings() throws Exception {
-    try (var metadata =
+    try (InputStream metadata =
         PlaceSourceProperties.class.getResourceAsStream(
             "/META-INF/spring-configuration-metadata.json")) {
       assertThat(metadata).isNotNull();
-      var properties = JsonMapper.builder().build().readTree(metadata).path("properties");
-      var names = new ArrayList<String>();
-      for (var property : properties) {
+      JsonNode properties = JsonMapper.builder().build().readTree(metadata).path("properties");
+      ArrayList<String> names = new ArrayList<String>();
+      for (JsonNode property : properties) {
         names.add(property.path("name").asText());
         if (property.path("name").asText().endsWith(".timeout")) {
           assertThat(property.path("type").asText()).isEqualTo("java.time.Duration");

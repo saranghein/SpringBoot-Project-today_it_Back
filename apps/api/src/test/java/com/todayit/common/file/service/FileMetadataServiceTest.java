@@ -14,6 +14,7 @@ import com.todayit.common.file.entity.FileRelatedType;
 import com.todayit.common.file.exception.FileErrorCode;
 import com.todayit.common.file.exception.FileException;
 import com.todayit.common.file.repository.FileRepository;
+import com.todayit.common.file.service.model.FileRegistrationResult;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -35,7 +36,7 @@ class FileMetadataServiceTest {
             FileRelatedType.INQUIRY_ATTACHMENT, "23"))
         .thenReturn(
             List.of(inquiry(1, 10_485_760), inquiry(2, 10_485_760), inquiry(3, 10_485_760)));
-    var additions = List.of(inquiry(4, 1));
+    List<File> additions = List.of(inquiry(4, 1));
 
     // when
     Throwable thrown =
@@ -58,7 +59,8 @@ class FileMetadataServiceTest {
     when(files.saveAllAndFlush(List.of(added))).thenReturn(List.of(added));
 
     // when
-    var result = service.register(FileRelatedType.MEMBER_PROFILE, "member", List.of(added));
+    FileRegistrationResult result =
+        service.register(FileRelatedType.MEMBER_PROFILE, "member", List.of(added));
 
     // then
     assertThat(result.files())

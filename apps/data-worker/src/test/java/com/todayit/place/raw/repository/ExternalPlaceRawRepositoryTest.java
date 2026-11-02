@@ -20,6 +20,7 @@ import com.todayit.place.client.external.PlaceDataSourceRegistry;
 import com.todayit.place.client.external.PlaceSourceException;
 import com.todayit.place.client.external.PlaceSourceException.Reason;
 import com.todayit.place.raw.config.NationwideCollectionProperties;
+import com.todayit.place.raw.entity.ExternalPlaceRaw;
 import com.todayit.place.raw.service.ExternalPlaceRawCommandService;
 import com.todayit.place.raw.service.ExternalPlaceRawQueryService;
 import com.todayit.place.raw.service.PlaceNormalizationQueryService;
@@ -27,9 +28,14 @@ import com.todayit.place.raw.service.TourApiCollectionPlanService;
 import com.todayit.place.raw.service.TourApiCollectionTargetQueryService;
 import com.todayit.place.raw.service.TourApiRawCollectionService;
 import com.todayit.place.raw.service.command.TourApiCollectionScope;
+import com.todayit.place.raw.service.model.PlaceNormalizationResult;
 import com.todayit.place.raw.service.model.PlaceNormalizationResult.Status;
+import com.todayit.place.raw.service.model.RawCollectionResult;
+import com.todayit.place.raw.service.model.RawPlaceSnapshot;
+import com.todayit.place.raw.service.model.RawRetryTarget;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
@@ -100,7 +106,7 @@ class ExternalPlaceRawRepositoryTest {
 
     service.saveSuccess("TOUR_API", "001", PAYLOAD, FIRST.plusSeconds(60));
 
-    var row = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw row = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
     assertThat(repository.count()).isEqualTo(1);
     assertThat(row.getId()).isEqualTo(id);
     assertThat(row.getCollectedAt()).isEqualTo(FIRST.plusSeconds(60));
@@ -116,12 +122,13 @@ class ExternalPlaceRawRepositoryTest {
     service.saveSuccess("CULTURE", "003", "{}", FIRST);
     service.saveSuccess("TOUR_API", "004", PAYLOAD, FIRST);
     long upperBound = queryService.findSucceededUpperBound("TOUR_API");
-    var first = queryService.findSucceededAfter("TOUR_API", 0, upperBound, 1);
+    List<RawPlaceSnapshot> first = queryService.findSucceededAfter("TOUR_API", 0, upperBound, 1);
     service.saveSuccess("TOUR_API", "005", PAYLOAD, FIRST);
     // 앞선 행의 상태가 변해도 offset처럼 다음 성공 행을 건너뛰지 않아야 합니다.
     service.saveFailure("TOUR_API", "001", null, Reason.TRANSIENT);
 
-    var next = queryService.findSucceededAfter("TOUR_API", first.getFirst().rawId(), upperBound, 1);
+    List<RawPlaceSnapshot> next =
+        queryService.findSucceededAfter("TOUR_API", first.getFirst().rawId(), upperBound, 1);
 
     assertThat(first)
         .extracting(com.todayit.place.raw.service.model.RawPlaceSnapshot::sourceId)
@@ -143,13 +150,14 @@ class ExternalPlaceRawRepositoryTest {
 
     service.saveFailure("TOUR_API", "001", "{\"list\":{}}", Reason.TRANSIENT);
 
-    var failed = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw failed = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
     assertThat(failed.getStatus()).isEqualTo("FAILED");
     assertThat(failed.getErrorCode()).isEqualTo("TRANSIENT");
     assertThat(failed.getPayload()).isEqualTo(original);
     assertThat(failed.getCollectedAt()).isEqualTo(FIRST);
     service.saveSuccess("TOUR_API", "001", PAYLOAD, FIRST.plusSeconds(60));
-    var recovered = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw recovered =
+        repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
     assertThat(recovered.getStatus()).isEqualTo("SUCCESS");
     assertThat(recovered.getErrorCode()).isNull();
     assertThat(repository.count()).isEqualTo(1);
@@ -162,7 +170,7 @@ class ExternalPlaceRawRepositoryTest {
         "TOUR_API", "001", "{\"list\":{\"contenttypeid\":\"12\"}}", Reason.TRANSIENT);
     service.saveFailure("CULTURE", "001", null, Reason.INVALID_RESPONSE);
 
-    var failed = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw failed = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
     assertThat(failed.getCollectedAt()).isNull();
     assertThat(failed.getPayload()).contains("contenttypeid");
     assertThat(repository.findByProviderAndSourceId("CULTURE", "001").orElseThrow().getPayload())
@@ -173,7 +181,7 @@ class ExternalPlaceRawRepositoryTest {
   /** 동일 원천의 동시 upsert가 중복 원본 행을 만들지 않는지 검증합니다. */
   @Test
   void concurrentUpsertsCannotCreateDuplicatePlaces() {
-    var writes =
+    CompletableFuture[] writes =
         IntStream.range(0, 8)
             .mapToObj(
                 index ->
@@ -189,7 +197,7 @@ class ExternalPlaceRawRepositoryTest {
   /** 겹치는 범위와 다른 지역을 순차 수집해도 원본 ID를 유지하며 재실행하는지 PostgreSQL에서 확인합니다. */
   @Test
   void multiScopeCollectionPreservesIdentityAcrossOverlappingTargetsAndReruns() {
-    var source = mock(PlaceDataSource.class);
+    PlaceDataSource source = mock(PlaceDataSource.class);
     when(registry.get(new SourceKey("TOUR_API", "kor-service2"))).thenReturn(source);
     when(source.fetchPage(any()))
         .thenAnswer(
@@ -214,19 +222,19 @@ class ExternalPlaceRawRepositoryTest {
                       : "[{\"contentid\":\"" + request.sourceId() + "\",\"title\":\"장소\"}]";
               return new SourceComponent(request.sourceId(), request.component(), payload, FIRST);
             });
-    var plan =
+    TourApiCollectionPlanService plan =
         new TourApiCollectionPlanService(
             collectionService,
             new TourApiCollectionTargetQueryService(
                 new JdbcTemplate(), new NationwideCollectionProperties(false, List.of())));
-    var targets =
+    List<TourApiCollectionScope> targets =
         List.of(
             new TourApiCollectionScope("11", "", "12"),
             new TourApiCollectionScope("11", "110", "12"),
             new TourApiCollectionScope("26", "110", "39"));
 
     assertThat(plan.collect(targets, 1, true).succeeded()).isEqualTo(3);
-    var ids =
+    List<Map<String, Object>> ids =
         jdbc.queryForList(
             "SELECT source_id, external_place_raw_id FROM external_place_raw ORDER BY source_id");
     assertThat(plan.collect(targets, 1, true).succeeded()).isEqualTo(3);
@@ -253,8 +261,8 @@ class ExternalPlaceRawRepositoryTest {
         "pending",
         "PENDING");
 
-    var first = queryService.findFailed("TOUR_API", 1);
-    var all = queryService.findFailed("TOUR_API", 10);
+    List<RawRetryTarget> first = queryService.findFailed("TOUR_API", 1);
+    List<RawRetryTarget> all = queryService.findFailed("TOUR_API", 10);
 
     assertThat(first).extracting(target -> target.sourceId()).containsExactly("002");
     assertThat(all).extracting(target -> target.sourceId()).containsExactly("002", "001");
@@ -266,8 +274,8 @@ class ExternalPlaceRawRepositoryTest {
     service.saveSuccess("TOUR_API", "001", listPayload("001"), FIRST);
     service.saveFailure("TOUR_API", "001", null, Reason.TRANSIENT);
     service.saveFailure("TOUR_API", "002", listPayload("002"), Reason.TRANSIENT);
-    var originalId = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow().getId();
-    var source = mock(PlaceDataSource.class);
+    Long originalId = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow().getId();
+    PlaceDataSource source = mock(PlaceDataSource.class);
     when(registry.get(new SourceKey("TOUR_API", "kor-service2"))).thenReturn(source);
     when(source.fetchComponent(any()))
         .thenAnswer(
@@ -281,9 +289,10 @@ class ExternalPlaceRawRepositoryTest {
                   request.sourceId(), request.component(), payload, FIRST.plusSeconds(1));
             });
 
-    var result = collectionService.retryFailed(1);
+    RawCollectionResult result = collectionService.retryFailed(1);
 
-    var recovered = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw recovered =
+        repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
     assertThat(result.succeeded()).isEqualTo(1);
     assertThat(recovered.getId()).isEqualTo(originalId);
     assertThat(recovered.getStatus()).isEqualTo("SUCCESS");
@@ -301,15 +310,15 @@ class ExternalPlaceRawRepositoryTest {
   void repeatedRetryFailurePreservesPreviousSuccessfulPayloadAndTimestamp() {
     service.saveSuccess("TOUR_API", "001", listPayload("001"), FIRST);
     service.saveFailure("TOUR_API", "001", null, Reason.TRANSIENT);
-    var before = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw before = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
     String originalPayload = before.getPayload();
-    var source = mock(PlaceDataSource.class);
+    PlaceDataSource source = mock(PlaceDataSource.class);
     when(registry.get(new SourceKey("TOUR_API", "kor-service2"))).thenReturn(source);
     when(source.fetchComponent(any())).thenThrow(new PlaceSourceException(Reason.TRANSIENT));
 
-    var result = collectionService.retryFailed(10);
+    RawCollectionResult result = collectionService.retryFailed(10);
 
-    var after = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw after = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
     assertThat(result.failed()).isEqualTo(1);
     assertThat(after.getId()).isEqualTo(before.getId());
     assertThat(after.getStatus()).isEqualTo("FAILED");
@@ -341,13 +350,13 @@ class ExternalPlaceRawRepositoryTest {
     service.saveSuccess("TOUR_API", "001", payload, FIRST);
     service.saveFailure("TOUR_API", "002", listPayload("002"), Reason.TRANSIENT);
     service.saveSuccess("CULTURE", "003", "{}", FIRST);
-    var before = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw before = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
 
-    var results = normalizationService.previewTourApi(10);
+    List<PlaceNormalizationResult> results = normalizationService.previewTourApi(10);
 
     assertThat(results).hasSize(1);
     assertThat(results.getFirst().status()).isEqualTo(Status.NORMALIZED);
-    var after = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
+    ExternalPlaceRaw after = repository.findByProviderAndSourceId("TOUR_API", "001").orElseThrow();
     assertThat(after.getId()).isEqualTo(before.getId());
     assertThat(after.getPayload()).isEqualTo(before.getPayload());
     assertThat(after.getStatus()).isEqualTo("SUCCESS");

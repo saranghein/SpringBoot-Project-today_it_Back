@@ -9,6 +9,7 @@ import com.todayit.common.file.config.FileUploadProperties;
 import com.todayit.common.file.entity.FileRelatedType;
 import com.todayit.common.file.exception.FileErrorCode;
 import com.todayit.common.file.exception.FileException;
+import com.todayit.common.file.service.model.ValidatedFile;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -41,7 +42,7 @@ class FileValidationServiceTest {
     List<MultipartFile> files = List.of(file("photo.PNG", "image/png", PNG));
 
     // when
-    var result = validation.validate(FileRelatedType.MEMBER_PROFILE, files);
+    List<ValidatedFile> result = validation.validate(FileRelatedType.MEMBER_PROFILE, files);
 
     // then
     assertThat(result.getFirst().extension().value()).isEqualTo("png");
@@ -72,7 +73,7 @@ class FileValidationServiceTest {
         List.of(file("photo.png", "image/png", Arrays.copyOf(PNG, 10_485_760)));
 
     // when
-    var result = validation.validate(FileRelatedType.FAQ_ATTACHMENT, files);
+    List<ValidatedFile> result = validation.validate(FileRelatedType.FAQ_ATTACHMENT, files);
 
     // then
     assertThat(result).hasSize(1);
@@ -97,11 +98,11 @@ class FileValidationServiceTest {
   @DisplayName("문의 첨부 합계가 정확히 30 MiB이면 허용한다")
   void acceptsExactlyThirtyMibForInquiry() {
     // given
-    var large = file("photo.png", "image/png", Arrays.copyOf(PNG, 10_485_760));
+    MockMultipartFile large = file("photo.png", "image/png", Arrays.copyOf(PNG, 10_485_760));
     List<MultipartFile> files = List.of(large, large, large);
 
     // when
-    var result = validation.validate(FileRelatedType.INQUIRY_ATTACHMENT, files);
+    List<ValidatedFile> result = validation.validate(FileRelatedType.INQUIRY_ATTACHMENT, files);
 
     // then
     assertThat(result).hasSize(3);
@@ -111,7 +112,7 @@ class FileValidationServiceTest {
   @DisplayName("문의 첨부 합계가 30 MiB를 초과하면 거부한다")
   void rejectsInquiryTotalOverThirtyMib() {
     // given
-    var large = file("photo.png", "image/png", Arrays.copyOf(PNG, 10_485_760));
+    MockMultipartFile large = file("photo.png", "image/png", Arrays.copyOf(PNG, 10_485_760));
     List<MultipartFile> files = List.of(large, large, large, file("photo.png", "image/png", PNG));
 
     // when
@@ -129,7 +130,7 @@ class FileValidationServiceTest {
     List<MultipartFile> files = Collections.nCopies(5, file("photo.png", "image/png", PNG));
 
     // when
-    var result = validation.validate(FileRelatedType.INQUIRY_ATTACHMENT, files);
+    List<ValidatedFile> result = validation.validate(FileRelatedType.INQUIRY_ATTACHMENT, files);
 
     // then
     assertThat(result).hasSize(5);
@@ -161,7 +162,7 @@ class FileValidationServiceTest {
                 "%PDF-1.7\n%%EOF".getBytes(StandardCharsets.US_ASCII)));
 
     // when
-    var result = validation.validate(FileRelatedType.INQUIRY_ATTACHMENT, files);
+    List<ValidatedFile> result = validation.validate(FileRelatedType.INQUIRY_ATTACHMENT, files);
 
     // then
     assertThat(result).hasSize(1);
@@ -190,7 +191,7 @@ class FileValidationServiceTest {
   @DisplayName("파일 스트림 읽기 실패는 내부 메시지 없이 파일 읽기 오류로 변환한다")
   void convertsFileReadFailure() throws IOException {
     // given
-    var unreadable = spy(file("photo.png", "image/png", PNG));
+    MockMultipartFile unreadable = spy(file("photo.png", "image/png", PNG));
     doThrow(new IOException("internal-stream-detail")).when(unreadable).getInputStream();
     List<MultipartFile> files = List.of(unreadable);
 

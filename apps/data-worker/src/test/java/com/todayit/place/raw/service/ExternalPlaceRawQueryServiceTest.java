@@ -34,13 +34,13 @@ class ExternalPlaceRawQueryServiceTest {
   /** 공급원 실패 행의 첫 페이지를 제한 조회하고 불변 스냅샷으로 반환하는지 검증합니다. */
   @Test
   void selectsOnlyFailedProviderRowsWithBoundedFirstPageAndReturnsSnapshot() {
-    var raw = mock(ExternalPlaceRaw.class);
+    ExternalPlaceRaw raw = mock(ExternalPlaceRaw.class);
     when(raw.getSourceId()).thenReturn("001");
     when(raw.getPayload()).thenReturn("{\"list\":{}}");
     when(repository.findByProviderAndStatusOrderByIdAsc("TOUR_API", "FAILED", PageRequest.of(0, 2)))
         .thenReturn(List.of(raw));
 
-    var targets = service.findFailed("TOUR_API", 2);
+    List<RawRetryTarget> targets = service.findFailed("TOUR_API", 2);
 
     assertThat(targets).containsExactly(new RawRetryTarget("001", "{\"list\":{}}"));
     assertThatThrownBy(() -> targets.clear()).isInstanceOf(UnsupportedOperationException.class);

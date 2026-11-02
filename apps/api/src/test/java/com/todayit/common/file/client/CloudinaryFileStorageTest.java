@@ -38,7 +38,7 @@ class CloudinaryFileStorageTest {
   void uploadsPdfAsRawAndChecksReturnedIdentity() {
     // given
     AtomicReference<ClientRequest> request = new AtomicReference<>();
-    var client =
+    CloudinaryFileStorage client =
         storage(
             HttpStatus.OK,
             "{\"public_id\":\"inquiry/key.pdf\",\"resource_type\":\"raw\",\"type\":\"authenticated\",\"bytes\":3}",
@@ -78,7 +78,8 @@ class CloudinaryFileStorageTest {
   @DisplayName("제공자 오류는 내부 응답 없이 커스텀 저장소 오류로 변환한다")
   void doesNotExposeProviderErrorBody() {
     // given
-    var client = storage(HttpStatus.UNAUTHORIZED, "secret-provider-body", new AtomicReference<>());
+    CloudinaryFileStorage client =
+        storage(HttpStatus.UNAUTHORIZED, "secret-provider-body", new AtomicReference<>());
 
     // when
     Throwable thrown =
@@ -99,7 +100,8 @@ class CloudinaryFileStorageTest {
   @DisplayName("이미 삭제된 파일을 다시 삭제해도 성공한다")
   void deletionIsIdempotentWhenAssetIsAlreadyGone() {
     // given
-    var client = storage(HttpStatus.OK, "{\"result\":\"not found\"}", new AtomicReference<>());
+    CloudinaryFileStorage client =
+        storage(HttpStatus.OK, "{\"result\":\"not found\"}", new AtomicReference<>());
 
     // when
     Throwable thrown =
@@ -144,7 +146,7 @@ class CloudinaryFileStorageTest {
   @DisplayName("잘못된 제공자 응답은 커스텀 저장소 오류로 변환한다")
   void convertsInvalidProviderResponse(String body) {
     // given
-    var client = storage(HttpStatus.OK, body, new AtomicReference<>());
+    CloudinaryFileStorage client = storage(HttpStatus.OK, body, new AtomicReference<>());
 
     // when
     Throwable thrown =
@@ -163,14 +165,14 @@ class CloudinaryFileStorageTest {
   @DisplayName("제공자 응답 시간이 초과하면 커스텀 저장소 오류로 변환한다")
   void convertsProviderTimeout() {
     // given
-    var shortTimeout =
+    CloudinaryProperties shortTimeout =
         new CloudinaryProperties("test-cloud", "test-key", "test-secret", Duration.ofMillis(20));
-    var web =
+    WebClient web =
         WebClient.builder()
             .baseUrl("https://api.cloudinary.com")
             .exchangeFunction(request -> Mono.never())
             .build();
-    var client = new CloudinaryFileStorage(shortTimeout, web);
+    CloudinaryFileStorage client = new CloudinaryFileStorage(shortTimeout, web);
 
     // when
     Throwable thrown =

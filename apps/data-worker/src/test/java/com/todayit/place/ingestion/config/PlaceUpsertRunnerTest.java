@@ -28,7 +28,7 @@ class PlaceUpsertRunnerTest {
   /** 적재 설정의 기본값이 바인딩되며 Bean 생성만으로 저장하지 않는지 검증합니다. */
   @Test
   void bothFlagsBindDefaultsButBeanCreationDoesNotWrite() {
-    var service = mock(PlaceIngestionService.class);
+    PlaceIngestionService service = mock(PlaceIngestionService.class);
     new ApplicationContextRunner()
         .withUserConfiguration(PlaceUpsertRunner.class)
         .withBean(PlaceIngestionService.class, () -> service)
@@ -37,7 +37,7 @@ class PlaceUpsertRunnerTest {
         .run(
             context -> {
               assertThat(context).hasSingleBean(PlaceUpsertRunner.class);
-              var properties = context.getBean(PlaceUpsertProperties.class);
+              PlaceUpsertProperties properties = context.getBean(PlaceUpsertProperties.class);
               assertThat(properties.enabled()).isTrue();
               assertThat(properties.runEnabled()).isTrue();
               assertThat(properties.limit()).isEqualTo(10);
@@ -49,7 +49,7 @@ class PlaceUpsertRunnerTest {
   /** 저장 기능 없이 실행 스위치만 켜면 실행 전에 시작이 실패하는지 검증합니다. */
   @Test
   void runSwitchWithoutWriteFeatureFailsBeforeExecution() {
-    var service = mock(PlaceIngestionService.class);
+    PlaceIngestionService service = mock(PlaceIngestionService.class);
     new ApplicationContextRunner()
         .withUserConfiguration(PlaceUpsertRunner.class)
         .withBean(PlaceIngestionService.class, () -> service)
@@ -61,7 +61,7 @@ class PlaceUpsertRunnerTest {
   /** 수집과 적재 Runner의 동시 활성화를 컨텍스트 초기화 단계에서 거부하는지 검증합니다. */
   @Test
   void rejectsSimultaneouslyEnabledRawRunnerDuringContextInitialization() {
-    var service = mock(PlaceIngestionService.class);
+    PlaceIngestionService service = mock(PlaceIngestionService.class);
     new ApplicationContextRunner()
         .withUserConfiguration(PlaceUpsertRunner.class)
         .withBean(PlaceIngestionService.class, () -> service)
@@ -76,9 +76,9 @@ class PlaceUpsertRunnerTest {
   /** Runner 호출 시에만 적재하고 일부 저장 실패는 실행 실패로 보고하는지 검증합니다. */
   @Test
   void writesOnlyWhenRunnerIsInvokedAndFailsAfterPartialStorageFailure() {
-    var service = mock(PlaceIngestionService.class);
+    PlaceIngestionService service = mock(PlaceIngestionService.class);
     when(service.ingestTourApi(10)).thenReturn(new PlaceIngestionResult(2, 1, 0, 0, 0, 1));
-    var runner =
+    PlaceUpsertRunner runner =
         new PlaceUpsertRunner(
             service,
             new PlaceUpsertProperties(true, true, 10, PlaceUpsertProperties.Mode.SAMPLE),
@@ -93,11 +93,11 @@ class PlaceUpsertRunnerTest {
   /** 적재 대상이 없거나 보류 대상뿐이면 정상 종료하는지 검증합니다. */
   @Test
   void noCandidatesOrOnlyDeferredRowsCompletesNormally() {
-    var service = mock(PlaceIngestionService.class);
+    PlaceIngestionService service = mock(PlaceIngestionService.class);
     when(service.ingestTourApi(10))
         .thenReturn(new PlaceIngestionResult(0, 0, 0, 0, 0, 0))
         .thenReturn(new PlaceIngestionResult(3, 0, 1, 1, 1, 0));
-    var runner =
+    PlaceUpsertRunner runner =
         new PlaceUpsertRunner(
             service,
             new PlaceUpsertProperties(true, true, 10, PlaceUpsertProperties.Mode.SAMPLE),
@@ -110,7 +110,7 @@ class PlaceUpsertRunnerTest {
   /** FULL로 전체 순회를 선택하고 일부 실패가 있으면 실행을 실패시키는지 확인합니다. */
   @Test
   void fullModeBindsAndReportsPartialFailureAfterCompleteTraversal() {
-    var service = mock(PlaceIngestionService.class);
+    PlaceIngestionService service = mock(PlaceIngestionService.class);
     when(service.ingestAllTourApi(2)).thenReturn(new PlaceIngestionResult(20, 18, 0, 1, 0, 1));
     new ApplicationContextRunner()
         .withUserConfiguration(PlaceUpsertRunner.class)
@@ -138,9 +138,9 @@ class PlaceUpsertRunnerTest {
   /** 실패 재처리 모드가 전체 적재 대신 실패 목록을 사용하며 대상이 없으면 정상 종료하는지 확인합니다. */
   @Test
   void retryModeUsesPendingFailuresOnlyAndEmptySetIsNormal() {
-    var service = mock(PlaceIngestionService.class);
+    PlaceIngestionService service = mock(PlaceIngestionService.class);
     when(service.retryFailedTourApi(10)).thenReturn(new PlaceIngestionResult(0, 0, 0, 0, 0, 0));
-    var runner =
+    PlaceUpsertRunner runner =
         new PlaceUpsertRunner(
             service,
             new PlaceUpsertProperties(true, true, 10, PlaceUpsertProperties.Mode.RETRY_FAILED),

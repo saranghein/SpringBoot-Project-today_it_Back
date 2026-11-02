@@ -21,6 +21,7 @@ import com.todayit.place.service.model.PlaceSort;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import org.assertj.core.api.AbstractThrowableAssert;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -275,7 +276,8 @@ class PlaceQueryServiceTest {
             regionPlaceQueryService);
 
     // When
-    var exception = assertThatThrownBy(() -> placeQueryService.findPlaceLocation(999));
+    AbstractThrowableAssert<? extends AbstractThrowableAssert<?, ?>, ?> exception =
+        assertThatThrownBy(() -> placeQueryService.findPlaceLocation(999));
 
     // Then
     exception.isInstanceOf(com.todayit.place.exception.PlaceNotFoundException.class);

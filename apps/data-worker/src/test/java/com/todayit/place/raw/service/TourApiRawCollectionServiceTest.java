@@ -22,6 +22,8 @@ import com.todayit.place.client.external.PlaceDataSource.SourcePageRequest;
 import com.todayit.place.client.external.PlaceDataSourceRegistry;
 import com.todayit.place.client.external.PlaceSourceException;
 import com.todayit.place.client.external.PlaceSourceException.Reason;
+import com.todayit.place.raw.service.command.TourApiCollectionScope;
+import com.todayit.place.raw.service.model.RawCollectionResult;
 import com.todayit.place.raw.service.model.RawRetryTarget;
 import java.time.Instant;
 import java.util.List;
@@ -37,6 +39,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** TourAPI 원본 묶음 수집과 실패 보존·재수집·중단 조건을 검증합니다. */
@@ -63,13 +66,13 @@ class TourApiRawCollectionServiceTest {
     givenPage(item("001"));
     givenDetails();
 
-    var result = service.collectSample(10);
+    RawCollectionResult result = service.collectSample(10);
 
     assertThat(result.succeeded()).isEqualTo(1);
     assertThat(result.failed()).isZero();
-    var payload = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
     verify(store).saveSuccess(eq("TOUR_API"), eq("001"), payload.capture(), any(Instant.class));
-    var json = JsonMapper.builder().build().readTree(payload.getValue());
+    JsonNode json = JsonMapper.builder().build().readTree(payload.getValue());
     assertThat(json.path("list").path("lDongSignguCd").asText()).isEqualTo("110");
     assertThat(json.path("list").path("contentid").asText()).isEqualTo("001");
     assertThat(json.path("common").isArray()).isTrue();
@@ -98,14 +101,14 @@ class TourApiRawCollectionServiceTest {
                 "001", Component.INTRODUCTION, Map.of("contentTypeId", "12"))))
         .thenThrow(new PlaceSourceException(Reason.TRANSIENT));
 
-    var result = service.collectSample(10);
+    RawCollectionResult result = service.collectSample(10);
 
     assertThat(result.attempted()).isEqualTo(2);
     assertThat(result.succeeded()).isEqualTo(1);
     assertThat(result.failed()).isEqualTo(1);
-    var payload = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
     verify(store).saveFailure(eq("TOUR_API"), eq("001"), payload.capture(), eq(Reason.TRANSIENT));
-    var list = JsonMapper.builder().build().readTree(payload.getValue());
+    JsonNode list = JsonMapper.builder().build().readTree(payload.getValue());
     assertThat(list.path("list").path("contenttypeid").asText()).isEqualTo("12");
     assertThat(list.has("common")).isFalse();
     verify(store, never()).saveSuccess(eq("TOUR_API"), eq("001"), anyString(), any());
@@ -125,7 +128,7 @@ class TourApiRawCollectionServiceTest {
     givenPage(item("001"), item("002"));
     when(source.fetchComponent(any())).thenThrow(new PlaceSourceException(reason));
 
-    var result = service.collectSample(10);
+    RawCollectionResult result = service.collectSample(10);
 
     assertThat(result.attempted()).isEqualTo(1);
     assertThat(result.failed()).isEqualTo(1);
@@ -232,7 +235,7 @@ class TourApiRawCollectionServiceTest {
                     "{\"list\":{\"contentid\":\"001\",\"contenttypeid\":\"39\",\"title\":\"음식점\"}}")));
     givenDetails();
 
-    var result = service.retryFailed(10);
+    RawCollectionResult result = service.retryFailed(10);
 
     assertThat(result.succeeded()).isEqualTo(1);
     verify(source, never()).fetchPage(any());
@@ -240,7 +243,7 @@ class TourApiRawCollectionServiceTest {
         .fetchComponent(
             new SourceComponentRequest(
                 "001", Component.INTRODUCTION, Map.of("contentTypeId", "39")));
-    var payload = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
     verify(store).saveSuccess(eq("TOUR_API"), eq("001"), payload.capture(), any());
     assertThat(
             JsonMapper.builder()
@@ -257,7 +260,7 @@ class TourApiRawCollectionServiceTest {
   void retryWithNoTargetsDoesNotCallProvider() {
     when(queryService.findFailed("TOUR_API", 10)).thenReturn(List.of());
 
-    var result = service.retryFailed(10);
+    RawCollectionResult result = service.retryFailed(10);
 
     assertThat(result.attempted()).isZero();
     verifyNoInteractions(store);
@@ -299,7 +302,7 @@ class TourApiRawCollectionServiceTest {
     when(source.fetchComponent(new SourceComponentRequest("001", Component.BASIC, Map.of())))
         .thenThrow(new PlaceSourceException(Reason.TRANSIENT));
 
-    var result = service.retryFailed(10);
+    RawCollectionResult result = service.retryFailed(10);
 
     assertThat(result.attempted()).isEqualTo(2);
     assertThat(result.succeeded()).isEqualTo(1);
@@ -323,7 +326,7 @@ class TourApiRawCollectionServiceTest {
         .thenReturn(List.of(retryTarget("001"), retryTarget("002")));
     when(source.fetchComponent(any())).thenThrow(new PlaceSourceException(reason));
 
-    var result = service.retryFailed(10);
+    RawCollectionResult result = service.retryFailed(10);
 
     assertThat(result.attempted()).isEqualTo(1);
     assertThat(result.failed()).isEqualTo(1);
@@ -369,7 +372,7 @@ class TourApiRawCollectionServiceTest {
     assertThat(service.collectAll(2))
         .isEqualTo(new com.todayit.place.raw.service.model.RawCollectionResult(3, 3, 0));
 
-    var requests = ArgumentCaptor.forClass(SourcePageRequest.class);
+    ArgumentCaptor<SourcePageRequest> requests = ArgumentCaptor.forClass(SourcePageRequest.class);
     verify(source, org.mockito.Mockito.times(2)).fetchPage(requests.capture());
     assertThat(requests.getAllValues())
         .extracting(SourcePageRequest::cursor)
@@ -388,10 +391,11 @@ class TourApiRawCollectionServiceTest {
   /** 다른 시도의 시군구·타입 필터가 다음 페이지에서도 유지되고 소개에는 원본 관광타입을 전달하는지 확인합니다. */
   @Test
   void selectedScopeIsKeptAcrossPagesAndIntroductionUsesReturnedContentType() {
-    var scope = new com.todayit.place.raw.service.command.TourApiCollectionScope("26", "110", "39");
-    var first =
+    TourApiCollectionScope scope =
+        new com.todayit.place.raw.service.command.TourApiCollectionScope("26", "110", "39");
+    SourceItem first =
         new SourceItem("001", "{\"contentid\":\"001\",\"contenttypeid\":\"39\",\"title\":\"음식점\"}");
-    var second =
+    SourceItem second =
         new SourceItem("002", "{\"contentid\":\"002\",\"contenttypeid\":\"39\",\"title\":\"음식점\"}");
     when(source.fetchPage(any()))
         .thenReturn(
@@ -401,11 +405,12 @@ class TourApiRawCollectionServiceTest {
 
     assertThat(service.collectAll(1, scope).succeeded()).isEqualTo(2);
 
-    var requests = ArgumentCaptor.forClass(SourcePageRequest.class);
+    ArgumentCaptor<SourcePageRequest> requests = ArgumentCaptor.forClass(SourcePageRequest.class);
     verify(source, org.mockito.Mockito.times(2)).fetchPage(requests.capture());
     assertThat(requests.getAllValues())
         .allSatisfy(request -> assertThat(request.filters()).isEqualTo(scope.filters()));
-    var details = ArgumentCaptor.forClass(SourceComponentRequest.class);
+    ArgumentCaptor<SourceComponentRequest> details =
+        ArgumentCaptor.forClass(SourceComponentRequest.class);
     verify(source, org.mockito.Mockito.times(6)).fetchComponent(details.capture());
     assertThat(
             details.getAllValues().stream()
@@ -438,7 +443,7 @@ class TourApiRawCollectionServiceTest {
                       : "[{\"contentid\":\"002\",\"title\":\"장소\"}]");
             });
 
-    var result = service.collectAll(1);
+    RawCollectionResult result = service.collectAll(1);
 
     assertThat(result.succeeded()).isEqualTo(1);
     assertThat(result.failed()).isEqualTo(1);
@@ -456,7 +461,7 @@ class TourApiRawCollectionServiceTest {
         .thenReturn(new SourcePage(List.of(item("001")), "v1:2", 2, Instant.now()));
     when(source.fetchComponent(any())).thenThrow(new PlaceSourceException(reason));
 
-    var result = service.collectAll(1);
+    RawCollectionResult result = service.collectAll(1);
     assertThat(result.failed()).isEqualTo(1);
     assertThat(result.stoppedEarly()).isTrue();
 

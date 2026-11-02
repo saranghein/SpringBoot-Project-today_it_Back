@@ -19,6 +19,7 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -54,7 +55,7 @@ class TourApiCollectionTargetQueryServiceTest {
   /** 시도 중복을 제거하고 코드 순서·관광타입 설정 순서를 유지하며 기준 데이터를 보존하는지 확인합니다. */
   @Test
   void distinctSidosGenerateOrderedCartesianProductWithoutChangingRegions() {
-    var result = service().findScopes(manual(List.of()));
+    List<TourApiCollectionScope> result = service().findScopes(manual(List.of()));
     assertThat(result)
         .containsExactly(
             new TourApiCollectionScope("11", "", "39"),
@@ -68,8 +69,8 @@ class TourApiCollectionTargetQueryServiceTest {
   /** 실행마다 지역을 다시 조회하고 이미 확정한 목록은 변경하지 않는지 확인합니다. */
   @Test
   void nextRunSeesNewSidosButCurrentPlanIsStable() {
-    var service = service();
-    var first = service.findScopes(manual(List.of()));
+    TourApiCollectionTargetQueryService service = service();
+    List<TourApiCollectionScope> first = service.findScopes(manual(List.of()));
     jdbc.update("INSERT INTO region VALUES ('27')");
     assertThat(first).hasSize(4);
     assertThat(service.findScopes(manual(List.of()))).hasSize(6);
@@ -94,8 +95,8 @@ class TourApiCollectionTargetQueryServiceTest {
   /** 수동 targets와 전국 자동 생성의 충돌을 DB 조회 전에 거부하는지 확인합니다. */
   @Test
   void explicitTargetsConflictBeforeDatabaseAccess() {
-    var unused = mock(JdbcTemplate.class);
-    var service =
+    JdbcTemplate unused = mock(JdbcTemplate.class);
+    TourApiCollectionTargetQueryService service =
         new TourApiCollectionTargetQueryService(
             unused, new NationwideCollectionProperties(true, List.of("12")));
     assertThatThrownBy(
@@ -109,8 +110,8 @@ class TourApiCollectionTargetQueryServiceTest {
   /** 비활성이면 DB 조회 없이 기존 수동 범위를 유지하는지 확인합니다. */
   @Test
   void disabledNationwidePreservesManualTargetsWithoutQuery() {
-    var unused = mock(JdbcTemplate.class);
-    var service =
+    JdbcTemplate unused = mock(JdbcTemplate.class);
+    TourApiCollectionTargetQueryService service =
         new TourApiCollectionTargetQueryService(
             unused, new NationwideCollectionProperties(false, List.of()));
     assertThat(service.findScopes(manual(List.of())))
@@ -124,7 +125,8 @@ class TourApiCollectionTargetQueryServiceTest {
   /** 관광타입이 없거나 중복·형식 오류가 있으면 활성화를 거부하는지 확인합니다. */
   @Test
   void enabledNationwideRequiresExplicitValidUniqueTypes() {
-    for (var types : List.of(List.<String>of(), List.of("12", "12"), List.of("x"), List.of("00"))) {
+    for (List<String> types :
+        List.of(List.<String>of(), List.of("12", "12"), List.of("x"), List.of("00"))) {
       assertThatThrownBy(() -> new NationwideCollectionProperties(true, types))
           .isInstanceOf(IllegalArgumentException.class);
     }
@@ -133,8 +135,8 @@ class TourApiCollectionTargetQueryServiceTest {
   /** 설정 이름의 바인딩과 기본 비활성을 확인하고 Bean 생성만으로 DB를 조회하지 않는지 검사합니다. */
   @Test
   void bindsOptInAndTypesWithoutQueryingAtStartup() {
-    var unused = mock(JdbcTemplate.class);
-    var context =
+    JdbcTemplate unused = mock(JdbcTemplate.class);
+    ApplicationContextRunner context =
         new ApplicationContextRunner()
             .withUserConfiguration(TourApiCollectionTargetQueryService.class)
             .withBean(JdbcTemplate.class, () -> unused)
@@ -157,22 +159,22 @@ class TourApiCollectionTargetQueryServiceTest {
   /** DB에서 생성한 범위가 실제 수동 FULL Runner의 모든 수집 대상에 전달되는지 확인합니다. */
   @Test
   void generatedTargetsAreUsedByFullRunner() {
-    var collection = mock(TourApiRawCollectionService.class);
-    var targetQuery = service();
-    var properties = manual(List.of());
-    var scopes = targetQuery.findScopes(properties);
-    for (var scope : scopes) {
+    TourApiRawCollectionService collection = mock(TourApiRawCollectionService.class);
+    TourApiCollectionTargetQueryService targetQuery = service();
+    RawCollectionProperties properties = manual(List.of());
+    List<TourApiCollectionScope> scopes = targetQuery.findScopes(properties);
+    for (TourApiCollectionScope scope : scopes) {
       when(collection.collectAll(10, scope)).thenReturn(new RawCollectionResult(1, 1, 0));
     }
-    var runner =
+    TourApiRawCollectionRunner runner =
         new TourApiRawCollectionRunner(
             collection,
             properties,
             mock(PlaceNormalizationQueryService.class),
             new TourApiCollectionPlanService(collection, targetQuery));
     runner.run(new DefaultApplicationArguments());
-    var order = org.mockito.Mockito.inOrder(collection);
-    for (var scope : scopes) {
+    InOrder order = org.mockito.Mockito.inOrder(collection);
+    for (TourApiCollectionScope scope : scopes) {
       order.verify(collection).collectAll(10, scope);
     }
     org.mockito.Mockito.verifyNoMoreInteractions(collection);

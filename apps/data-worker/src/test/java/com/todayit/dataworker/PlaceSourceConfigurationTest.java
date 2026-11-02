@@ -40,7 +40,7 @@ class PlaceSourceConfigurationTest {
                       context.getEnvironment().getProperty("todayit.place.sources.tourapi.timeout"))
                   .isEqualTo("2s");
               assertThat(context.getBeansOfType(javax.sql.DataSource.class)).isEmpty();
-              var properties = context.getBean(PlaceSourceProperties.class);
+              PlaceSourceProperties properties = context.getBean(PlaceSourceProperties.class);
               assertThat(properties.tourapi().enabled()).isTrue();
               assertThat(properties.tourapi().serviceKey()).isEqualTo("fixture");
               assertThat(properties.tourapi().timeout()).isEqualTo(Duration.ofSeconds(2));

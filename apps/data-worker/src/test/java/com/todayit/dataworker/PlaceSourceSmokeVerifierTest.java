@@ -53,7 +53,7 @@ class PlaceSourceSmokeVerifierTest {
   /** 문화시설의 시설 식별자와 이름 필드로 상세를 검증하는지 확인합니다. */
   @Test
   void cultureUsesFacilityFields() {
-    var key = new SourceKey("CULTURE", "culture-art-spaces");
+    SourceKey key = new SourceKey("CULTURE", "culture-art-spaces");
     assertDoesNotThrow(
         () -> verify(key, Component.BASIC, "[{\"seq\":\"7\",\"culName\":\"문화시설\"}]"));
     assertThrows(AssertionError.class, () -> verify(key, Component.BASIC, "[{\"seq\":\"7\"}]"));
@@ -62,7 +62,7 @@ class PlaceSourceSmokeVerifierTest {
   /** 잘못된 응답의 원문이 실패 메시지에 포함되지 않는지 검증합니다. */
   @Test
   void invalidPayloadDoesNotAppearInFailureMessage() {
-    var failure =
+    AssertionError failure =
         assertThrows(
             AssertionError.class,
             () -> verify(tourKey, Component.BASIC, "invalid fixture-private-payload"));
@@ -79,8 +79,8 @@ class PlaceSourceSmokeVerifierTest {
    * @throws AssertionError 원본 구조·식별자·필수 필드가 검증 계약에 맞지 않을 때
    */
   private void verify(SourceKey key, Component component, String json) {
-    var request = new SourceComponentRequest("7", component, Map.of());
-    var response = new SourceComponent("7", component, json, Instant.EPOCH);
+    SourceComponentRequest request = new SourceComponentRequest("7", component, Map.of());
+    SourceComponent response = new SourceComponent("7", component, json, Instant.EPOCH);
     PlaceSourceSmokeVerifier.verify(key, request, response);
   }
 }

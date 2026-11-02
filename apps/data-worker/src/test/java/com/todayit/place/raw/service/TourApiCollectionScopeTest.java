@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.todayit.place.raw.service.command.TourApiCollectionScope;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -14,7 +15,7 @@ class TourApiCollectionScopeTest {
   /** 기본 범위가 서울 전체 관광지이며 시군구 필터를 포함하지 않는지 확인합니다. */
   @Test
   void defaultsKeepSeoulAttractionsWithoutSigunguFilter() {
-    var filters = TourApiCollectionScope.seoulAttractions().filters();
+    Map<String, String> filters = TourApiCollectionScope.seoulAttractions().filters();
     assertThat(filters)
         .hasSize(2)
         .containsEntry("lDongRegnCd", "11")
@@ -25,7 +26,7 @@ class TourApiCollectionScopeTest {
   /** 선택한 시군구와 타입을 원문 그대로 전달하고 필터의 후속 변경을 막는지 확인합니다. */
   @Test
   void buildsExactLegalDistrictAndTypeFilters() {
-    var filters = new TourApiCollectionScope("26", "110", "39").filters();
+    Map<String, String> filters = new TourApiCollectionScope("26", "110", "39").filters();
     assertThat(filters)
         .hasSize(3)
         .containsEntry("lDongRegnCd", "26")

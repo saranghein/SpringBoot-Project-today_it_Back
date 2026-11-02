@@ -17,6 +17,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.InOrder;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /** 여러 범위 순차 수집의 순서·집계·오류별 중단 경계를 검증합니다. */
@@ -38,7 +39,7 @@ class TourApiCollectionPlanServiceTest {
     when(collection.collectAll(2, second)).thenReturn(new RawCollectionResult(5, 5, 0));
     assertThat(service.collect(List.of(first, second), 2, true))
         .isEqualTo(new RawCollectionResult(8, 7, 1));
-    var order = inOrder(collection);
+    InOrder order = inOrder(collection);
     order.verify(collection).collectAll(2, first);
     order.verify(collection).collectAll(2, second);
     verifyNoMoreInteractions(collection);
@@ -81,7 +82,7 @@ class TourApiCollectionPlanServiceTest {
     when(collection.collectSample(2, second)).thenReturn(new RawCollectionResult(2, 2, 0));
     assertThat(service.collect(List.of(first, second), 2, false))
         .isEqualTo(new RawCollectionResult(4, 4, 0));
-    var order = inOrder(collection);
+    InOrder order = inOrder(collection);
     order.verify(collection).collectSample(2, first);
     order.verify(collection).collectSample(2, second);
     verifyNoMoreInteractions(collection);

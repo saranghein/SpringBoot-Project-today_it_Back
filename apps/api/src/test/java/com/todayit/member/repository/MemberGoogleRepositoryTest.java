@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.todayit.member.entity.Member;
 import com.todayit.member.entity.MemberProvider;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -70,13 +71,13 @@ class MemberGoogleRepositoryTest {
         "구글테스트회원");
 
     // When
-    var googleMember =
+    Optional<Member> googleMember =
         memberRepository.findByProviderAndProviderUserId(MemberProvider.GOOGLE, googleUserId);
 
-    var localMember =
+    Optional<Member> localMember =
         memberRepository.findByProviderAndProviderUserId(MemberProvider.LOCAL, googleUserId);
 
-    var unknownMember =
+    Optional<Member> unknownMember =
         memberRepository.findByProviderAndProviderUserId(
             MemberProvider.GOOGLE, "unknown-google-user");
 
@@ -104,7 +105,7 @@ class MemberGoogleRepositoryTest {
     assertThat(member.getProviderUserId()).isEqualTo("google-new-user-123");
 
     // 저장한 Google 계정이 기존 로그인 조회 조건으로 검색되는지 검증
-    var savedMember =
+    Optional<Member> savedMember =
         memberRepository.findByProviderAndProviderUserId(
             MemberProvider.GOOGLE, "google-new-user-123");
 

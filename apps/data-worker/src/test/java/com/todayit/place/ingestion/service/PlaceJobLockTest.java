@@ -23,8 +23,8 @@ class PlaceJobLockTest {
    */
   @Test
   void lostLockResponseAbortsPhysicalConnectionBeforeReturningIt() throws SQLException {
-    var source = mock(DataSource.class);
-    var connection = mock(Connection.class);
+    DataSource source = mock(DataSource.class);
+    Connection connection = mock(Connection.class);
     when(source.getConnection()).thenReturn(connection);
     when(connection.getAutoCommit()).thenReturn(true);
     when(connection.prepareStatement(anyString())).thenThrow(new SQLException("fixture"));

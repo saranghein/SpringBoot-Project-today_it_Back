@@ -50,7 +50,7 @@ class PlaceIngestionServiceTest {
     when(store.upsert(argThat(value -> value != null && value.sourceId().equals("004"))))
         .thenReturn(new PlaceUpsertResult("004", Status.REGION_NOT_FOUND, null));
 
-    var result = service.ingestTourApi(10);
+    PlaceIngestionResult result = service.ingestTourApi(10);
 
     assertThat(result).isEqualTo(new PlaceIngestionResult(4, 1, 1, 1, 1, 0));
     verify(store, org.mockito.Mockito.times(2)).upsert(any());
@@ -82,7 +82,7 @@ class PlaceIngestionServiceTest {
   @Test
   void failureLogIdentifiesRawRowWithoutLeakingPayloadOrExceptionMessage() {
     Logger logger = (Logger) LoggerFactory.getLogger(PlaceIngestionService.class);
-    var appender = new ListAppender<ILoggingEvent>();
+    ListAppender<ILoggingEvent> appender = new ListAppender<ILoggingEvent>();
     appender.start();
     logger.addAppender(appender);
     try {
@@ -93,7 +93,7 @@ class PlaceIngestionServiceTest {
 
       service.ingestTourApi(10);
 
-      var failures =
+      List<ILoggingEvent> failures =
           appender.list.stream()
               .filter(event -> event.getFormattedMessage().contains("PLACE_INGESTION_ITEM_FAILED"))
               .toList();
@@ -291,7 +291,7 @@ class PlaceIngestionServiceTest {
    * @return 지정한 PK의 원본 스냅샷
    */
   private RawPlaceSnapshot withId(long id, String code) {
-    var original = snapshot(Long.toString(id), code);
+    RawPlaceSnapshot original = snapshot(Long.toString(id), code);
     return new RawPlaceSnapshot(
         id, original.provider(), original.sourceId(), original.status(), original.payloadJson());
   }
