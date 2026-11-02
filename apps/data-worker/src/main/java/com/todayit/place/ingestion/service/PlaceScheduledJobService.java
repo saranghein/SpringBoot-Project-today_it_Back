@@ -32,8 +32,6 @@ public class PlaceScheduledJobService {
   }
 
   /**
-   * 실행 잠금·작업 이력·범위별 수집·건별 적재 서비스와 설정을 주입합니다.
-   *
    * @param lock 정기 실행 잠금
    * @param history 실행 이력
    * @param collection 목록 순차 수집

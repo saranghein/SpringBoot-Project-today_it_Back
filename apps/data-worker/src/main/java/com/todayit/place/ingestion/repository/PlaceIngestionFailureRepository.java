@@ -17,8 +17,6 @@ public class PlaceIngestionFailureRepository {
   private final JdbcTemplate jdbc;
 
   /**
-   * 적재 실패 기록·조회에 사용할 JDBC 도구를 주입합니다.
-   *
    * @param jdbc worker의 JDBC 도구
    */
   public PlaceIngestionFailureRepository(JdbcTemplate jdbc) {

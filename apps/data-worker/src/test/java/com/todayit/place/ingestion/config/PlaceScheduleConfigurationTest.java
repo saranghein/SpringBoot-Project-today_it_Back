@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.todayit.place.ingestion.service.PlaceJobHistoryService;
 import com.todayit.place.ingestion.service.PlaceScheduledJobService;
 import com.todayit.place.ingestion.service.PlaceScheduledJobService.JobType;
+import com.todayit.place.raw.config.NationwideCollectionProperties;
 import com.todayit.place.raw.config.RawCollectionProperties;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,13 @@ class PlaceScheduleConfigurationTest {
   void validConfigurationVerifiesDatabaseButDoesNotExecuteOnConstruction() {
     var config =
         new PlaceScheduleConfiguration(
-            schedule, collection(false), upsert(true, false), true, history, jobs);
+            schedule,
+            collection(false),
+            new NationwideCollectionProperties(false, List.of()),
+            upsert(true, false),
+            true,
+            history,
+            jobs);
     verify(history).verifyReady();
     verifyNoInteractions(jobs);
     config.collectAndIngest();
@@ -50,22 +57,46 @@ class PlaceScheduleConfigurationTest {
     assertThatThrownBy(
             () ->
                 new PlaceScheduleConfiguration(
-                    schedule, collection(true), upsert(true, false), true, history, jobs))
+                    schedule,
+                    collection(true),
+                    new NationwideCollectionProperties(false, List.of()),
+                    upsert(true, false),
+                    true,
+                    history,
+                    jobs))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () ->
                 new PlaceScheduleConfiguration(
-                    schedule, collection(false), upsert(true, true), true, history, jobs))
+                    schedule,
+                    collection(false),
+                    new NationwideCollectionProperties(false, List.of()),
+                    upsert(true, true),
+                    true,
+                    history,
+                    jobs))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () ->
                 new PlaceScheduleConfiguration(
-                    schedule, collection(false), upsert(false, false), true, history, jobs))
+                    schedule,
+                    collection(false),
+                    new NationwideCollectionProperties(false, List.of()),
+                    upsert(false, false),
+                    true,
+                    history,
+                    jobs))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () ->
                 new PlaceScheduleConfiguration(
-                    schedule, collection(false), upsert(true, false), false, history, jobs))
+                    schedule,
+                    collection(false),
+                    new NationwideCollectionProperties(false, List.of()),
+                    upsert(true, false),
+                    false,
+                    history,
+                    jobs))
         .isInstanceOf(IllegalArgumentException.class);
     verifyNoInteractions(history, jobs);
   }
@@ -81,9 +112,87 @@ class PlaceScheduleConfigurationTest {
       assertThatThrownBy(
               () ->
                   new PlaceScheduleConfiguration(
-                      invalid, collection(false), upsert(true, false), true, history, jobs))
+                      invalid,
+                      collection(false),
+                      new NationwideCollectionProperties(false, List.of()),
+                      upsert(true, false),
+                      true,
+                      history,
+                      jobs))
           .isInstanceOf(RuntimeException.class);
     }
+    verifyNoInteractions(history, jobs);
+  }
+
+  @Test
+  void nationwideIgnoresUnusedSingleScopeSettings() {
+    var unusedScope =
+        new RawCollectionProperties(
+            false,
+            10,
+            RawCollectionProperties.Mode.FULL,
+            "invalid",
+            "invalid",
+            "invalid",
+            List.of());
+
+    new PlaceScheduleConfiguration(
+        schedule,
+        unusedScope,
+        new NationwideCollectionProperties(true, List.of("12")),
+        upsert(true, false),
+        true,
+        history,
+        jobs);
+
+    verify(history).verifyReady();
+    verifyNoInteractions(jobs);
+  }
+
+  @Test
+  void nationwideRejectsManualTargetsBeforeDatabaseAndExecution() {
+    var manualTargets =
+        new RawCollectionProperties(
+            false,
+            10,
+            RawCollectionProperties.Mode.FULL,
+            "11",
+            "",
+            "12",
+            List.of(new RawCollectionProperties.Target("26", "", "39")));
+
+    assertThatThrownBy(
+            () ->
+                new PlaceScheduleConfiguration(
+                    schedule,
+                    manualTargets,
+                    new NationwideCollectionProperties(true, List.of("12")),
+                    upsert(true, false),
+                    true,
+                    history,
+                    jobs))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("전국 수집과 수동 targets를 함께 지정할 수 없습니다.");
+    verifyNoInteractions(history, jobs);
+  }
+
+  @Test
+  void manualCollectionStillRejectsInvalidSingleScopeBeforeDatabaseAndExecution() {
+    var invalidScope =
+        new RawCollectionProperties(
+            false, 10, RawCollectionProperties.Mode.FULL, "invalid", "", "12", List.of());
+
+    assertThatThrownBy(
+            () ->
+                new PlaceScheduleConfiguration(
+                    schedule,
+                    invalidScope,
+                    new NationwideCollectionProperties(false, List.of()),
+                    upsert(true, false),
+                    true,
+                    history,
+                    jobs))
+        .isInstanceOf(IllegalArgumentException.class);
     verifyNoInteractions(history, jobs);
   }
 

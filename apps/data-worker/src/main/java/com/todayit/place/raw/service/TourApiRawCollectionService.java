@@ -39,8 +39,6 @@ public class TourApiRawCollectionService {
   private final JsonMapper json = JsonMapper.builder().build();
 
   /**
-   * 공급원 선택과 원본 저장 서비스를 주입합니다.
-   *
    * @param registry 활성 공급원 Registry
    * @param commandService 별도 트랜잭션의 저장 서비스
    * @param queryService 별도 읽기 트랜잭션의 재수집 대상 조회 서비스

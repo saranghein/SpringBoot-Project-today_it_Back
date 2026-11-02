@@ -16,8 +16,6 @@ public final class RedtablePlaceDataSource implements PlaceDataSource {
   private final PlaceSourceHttpClient http;
 
   /**
-   * 서울 상품 HTTP 설정을 받습니다.
-   *
    * @param http 공급원 HTTP Client
    */
   public RedtablePlaceDataSource(PlaceSourceHttpClient http) {

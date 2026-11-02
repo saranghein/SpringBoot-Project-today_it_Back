@@ -22,8 +22,6 @@ public class TourApiCollectionPlanService {
   private final TourApiCollectionTargetQueryService targets;
 
   /**
-   * 개별 범위의 수집 서비스를 주입합니다.
-   *
    * @param collection 원본 수집 서비스
    * @param targets 수동 또는 DB 시도별 수집 범위 조회
    */

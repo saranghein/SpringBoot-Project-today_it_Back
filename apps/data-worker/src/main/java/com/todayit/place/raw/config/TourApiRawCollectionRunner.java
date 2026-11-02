@@ -22,8 +22,6 @@ public class TourApiRawCollectionRunner implements ApplicationRunner {
   private final TourApiCollectionPlanService planService;
 
   /**
-   * 원본 재수집·정제 미리보기·범위별 수집 서비스와 실행 설정을 주입합니다.
-   *
    * @param collectionService 실패 원본 재수집 서비스
    * @param properties 수동 실행 설정
    * @param normalizationQueryService 저장 없는 정제 미리보기

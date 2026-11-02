@@ -3,6 +3,7 @@ package com.todayit.place.ingestion.config;
 import com.todayit.place.ingestion.service.PlaceJobHistoryService;
 import com.todayit.place.ingestion.service.PlaceScheduledJobService;
 import com.todayit.place.ingestion.service.PlaceScheduledJobService.JobType;
+import com.todayit.place.raw.config.NationwideCollectionProperties;
 import com.todayit.place.raw.config.RawCollectionProperties;
 import java.time.ZoneId;
 import org.slf4j.Logger;
@@ -23,6 +24,7 @@ import org.springframework.scheduling.support.CronExpression;
 @EnableConfigurationProperties({
   PlaceScheduleProperties.class,
   RawCollectionProperties.class,
+  NationwideCollectionProperties.class,
   PlaceUpsertProperties.class
 })
 @ConditionalOnProperty(name = "todayit.place.schedule.enabled", havingValue = "true")
@@ -36,6 +38,7 @@ public class PlaceScheduleConfiguration {
    *
    * @param schedule 시간대와 cron 설정
    * @param collection 수집 목록·페이지 크기
+   * @param nationwide 전국 수집 설정
    * @param upsert 적재 기능·묶음 크기
    * @param tourApiEnabled 공급원 활성 여부
    * @param history 필요한 DB 테이블 준비 검사
@@ -45,6 +48,7 @@ public class PlaceScheduleConfiguration {
   public PlaceScheduleConfiguration(
       PlaceScheduleProperties schedule,
       RawCollectionProperties collection,
+      NationwideCollectionProperties nationwide,
       PlaceUpsertProperties upsert,
       @Value("${todayit.place.sources.tourapi.enabled:false}") boolean tourApiEnabled,
       PlaceJobHistoryService history,
@@ -58,7 +62,13 @@ public class PlaceScheduleConfiguration {
         || upsert.limit() > 10) {
       throw new IllegalArgumentException("수집·적재 묶음 크기는 1~10이어야 합니다.");
     }
-    collection.toScopes();
+    if (nationwide.enabled()) {
+      if (!collection.targets().isEmpty()) {
+        throw new IllegalArgumentException("전국 수집과 수동 targets를 함께 지정할 수 없습니다.");
+      }
+    } else {
+      collection.toScopes();
+    }
     ZoneId.of(schedule.zone());
     if (schedule.collectCron().equals("-") && schedule.retryCron().equals("-")) {
       throw new IllegalArgumentException("정기 작업 주기를 하나 이상 활성화해야 합니다.");

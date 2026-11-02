@@ -14,8 +14,6 @@ public class PlaceJobRunRepository {
   private final JdbcTemplate jdbc;
 
   /**
-   * 작업 이력 저장에 사용할 JDBC 도구를 받습니다.
-   *
    * @param jdbc 동일 DB의 JDBC 도구
    */
   public PlaceJobRunRepository(JdbcTemplate jdbc) {

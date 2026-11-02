@@ -18,8 +18,6 @@ public class PlaceJobLock {
   private final DataSource dataSource;
 
   /**
-   * 잠금을 유지할 연결을 빌릴 DataSource를 받습니다.
-   *
    * @param dataSource worker의 DataSource
    */
   public PlaceJobLock(DataSource dataSource) {

@@ -16,8 +16,6 @@ public class PlaceIngestionFailureService {
   private final PlaceIngestionFailureRepository repository;
 
   /**
-   * 미해결 적재 실패 저장소를 주입합니다.
-   *
    * @param repository 실패 목록 저장소
    */
   public PlaceIngestionFailureService(PlaceIngestionFailureRepository repository) {

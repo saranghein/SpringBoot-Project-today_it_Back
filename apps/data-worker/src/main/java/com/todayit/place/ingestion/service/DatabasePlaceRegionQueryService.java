@@ -15,8 +15,6 @@ public class DatabasePlaceRegionQueryService implements PlaceRegionQueryService 
   private final JdbcTemplate jdbc;
 
   /**
-   * worker와 동일한 DataSource의 조회 도구를 받습니다.
-   *
    * @param jdbc 지역 조회에 사용할 JDBC 도구
    */
   public DatabasePlaceRegionQueryService(JdbcTemplate jdbc) {

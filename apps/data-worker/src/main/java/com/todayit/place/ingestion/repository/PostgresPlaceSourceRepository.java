@@ -21,8 +21,6 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
   private final EntityManager entityManager;
 
   /**
-   * 현재 트랜잭션에 참여하는 EntityManager를 주입합니다.
-   *
    * @param entityManager worker의 JPA 저장 세션
    */
   public PostgresPlaceSourceRepository(EntityManager entityManager) {

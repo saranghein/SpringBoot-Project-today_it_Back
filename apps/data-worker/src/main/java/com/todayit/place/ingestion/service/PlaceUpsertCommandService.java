@@ -24,8 +24,6 @@ public class PlaceUpsertCommandService {
   private final PlaceIngestionFailureService failureService;
 
   /**
-   * 지역 조회 서비스와 원천 장소 저장소를 주입합니다.
-   *
    * @param regionQueryService 시도·시군구 코드로 실제 지역 ID를 찾는 조회 구현
    * @param repository 원천 식별자 기반 멱등 저장 구현
    * @param failureService 반영 성공과 함께 실패 목록을 해소할 서비스

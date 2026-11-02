@@ -23,8 +23,6 @@ public final class CulturePlaceDataSource implements PlaceDataSource {
   private final PlaceSourceHttpClient http;
 
   /**
-   * 문화시설 조회서비스 HTTP 설정을 받습니다.
-   *
    * @param http 공급원 HTTP Client
    */
   public CulturePlaceDataSource(PlaceSourceHttpClient http) {

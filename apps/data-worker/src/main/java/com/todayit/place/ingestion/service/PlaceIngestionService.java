@@ -29,8 +29,6 @@ public class PlaceIngestionService {
   private final PlaceIngestionFailureService failureService;
 
   /**
-   * 읽기·정제·장소별 저장을 수행할 서비스를 주입합니다.
-   *
    * @param rawQueryService 성공 원본 조회
    * @param normalizer 원본 정제
    * @param commandService 별도 트랜잭션의 서비스 장소 저장

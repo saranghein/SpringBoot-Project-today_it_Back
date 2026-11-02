@@ -26,8 +26,6 @@ public class TourApiCollectionTargetQueryService {
   private final NationwideCollectionProperties nationwide;
 
   /**
-   * 같은 DB의 지역 조회 도구와 전국 수집 설정을 받습니다.
-   *
    * @param jdbc 시도 목록 조회 도구
    * @param nationwide 자동 생성 여부와 관광타입
    */

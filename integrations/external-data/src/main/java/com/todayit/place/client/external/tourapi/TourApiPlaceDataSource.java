@@ -29,8 +29,6 @@ public final class TourApiPlaceDataSource implements PlaceDataSource {
   private final String mobileApp;
 
   /**
-   * TourAPI HTTP 설정을 받습니다.
-   *
    * @param http 공급원 HTTP Client
    * @param mobileApp 공공데이터포털에 전달할 앱 이름
    */

@@ -19,8 +19,6 @@ public class PlaceNormalizationQueryService {
   private final TourApiPlaceNormalizationService normalizer;
 
   /**
-   * 읽기 전용 원본 조회와 순수 변환 서비스를 주입합니다.
-   *
    * @param rawQueryService 원본 조회
    * @param normalizer TourAPI 정제 규칙
    */

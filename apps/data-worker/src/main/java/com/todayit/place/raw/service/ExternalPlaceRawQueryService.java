@@ -16,8 +16,6 @@ public class ExternalPlaceRawQueryService {
   private final ExternalPlaceRawRepository repository;
 
   /**
-   * 원본 저장소를 주입합니다.
-   *
    * @param repository 원본 저장소
    */
   public ExternalPlaceRawQueryService(ExternalPlaceRawRepository repository) {

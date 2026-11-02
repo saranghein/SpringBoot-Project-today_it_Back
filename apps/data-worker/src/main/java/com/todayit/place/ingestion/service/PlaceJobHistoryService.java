@@ -18,8 +18,6 @@ public class PlaceJobHistoryService {
   private final JsonMapper json = JsonMapper.builder().build();
 
   /**
-   * 실행 이력 저장소를 받습니다.
-   *
    * @param repository 작업 이력 저장소
    */
   public PlaceJobHistoryService(PlaceJobRunRepository repository) {
