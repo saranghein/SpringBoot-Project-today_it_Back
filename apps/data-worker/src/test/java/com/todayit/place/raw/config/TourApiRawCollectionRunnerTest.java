@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.todayit.place.raw.config.RawCollectionProperties.Mode;
 import com.todayit.place.raw.service.PlaceNormalizationQueryService;
 import com.todayit.place.raw.service.TourApiCollectionPlanService;
+import com.todayit.place.raw.service.TourApiCollectionTargetQueryService;
 import com.todayit.place.raw.service.TourApiRawCollectionService;
 import com.todayit.place.raw.service.command.TourApiCollectionScope;
 import com.todayit.place.raw.service.model.RawCollectionResult;
@@ -16,9 +17,20 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /** 수집·재수집·정제 실행 모드와 명시적 실행 조건을 검증합니다. */
 class TourApiRawCollectionRunnerTest {
+
+  /**
+   * DB를 조회하지 않는 기존 수동 범위 해석기를 만듭니다.
+   *
+   * @return 전국 수집이 꺼진 범위 조회 서비스
+   */
+  private TourApiCollectionTargetQueryService manualTargets() {
+    return new TourApiCollectionTargetQueryService(
+        new JdbcTemplate(), new NationwideCollectionProperties(false, List.of()));
+  }
 
   /** 명시적으로 활성화한 경우에만 수집 Runner가 등록되는지 검증합니다. */
   @Test
@@ -34,6 +46,9 @@ class TourApiRawCollectionRunnerTest {
     new ApplicationContextRunner()
         .withUserConfiguration(TourApiRawCollectionRunner.class, TourApiCollectionPlanService.class)
         .withBean(TourApiRawCollectionService.class, () -> mock(TourApiRawCollectionService.class))
+        .withBean(
+            TourApiCollectionTargetQueryService.class,
+            () -> mock(TourApiCollectionTargetQueryService.class))
         .withBean(
             PlaceNormalizationQueryService.class, () -> mock(PlaceNormalizationQueryService.class))
         .withPropertyValues("todayit.place.collection.enabled=true")
@@ -106,6 +121,7 @@ class TourApiRawCollectionRunnerTest {
   void retryModeBindsFromExplicitConfiguration() {
     new ApplicationContextRunner()
         .withUserConfiguration(TourApiRawCollectionRunner.class, TourApiCollectionPlanService.class)
+        .withBean(TourApiCollectionTargetQueryService.class, this::manualTargets)
         .withBean(TourApiRawCollectionService.class, () -> mock(TourApiRawCollectionService.class))
         .withBean(
             PlaceNormalizationQueryService.class, () -> mock(PlaceNormalizationQueryService.class))
@@ -127,7 +143,7 @@ class TourApiRawCollectionRunnerTest {
             collection,
             new RawCollectionProperties(true, 10, Mode.NORMALIZE, "11", "", "12", List.of()),
             normalization,
-            new TourApiCollectionPlanService(collection));
+            new TourApiCollectionPlanService(collection, manualTargets()));
 
     runner.run(new DefaultApplicationArguments());
 
@@ -147,7 +163,7 @@ class TourApiRawCollectionRunnerTest {
         service,
         new RawCollectionProperties(true, 10, mode, "11", "", "12", List.of()),
         mock(PlaceNormalizationQueryService.class),
-        new TourApiCollectionPlanService(service));
+        new TourApiCollectionPlanService(service, manualTargets()));
   }
 
   /** 전체 순회 후 개별 상세 실패가 있으면 최종 실행을 실패시키는지 확인합니다. */
@@ -172,6 +188,7 @@ class TourApiRawCollectionRunnerTest {
     new ApplicationContextRunner()
         .withUserConfiguration(TourApiRawCollectionRunner.class, TourApiCollectionPlanService.class)
         .withBean(TourApiRawCollectionService.class, () -> service)
+        .withBean(TourApiCollectionTargetQueryService.class, this::manualTargets)
         .withBean(
             PlaceNormalizationQueryService.class, () -> mock(PlaceNormalizationQueryService.class))
         .withPropertyValues(
@@ -197,7 +214,7 @@ class TourApiRawCollectionRunnerTest {
             service,
             new RawCollectionProperties(true, 10, Mode.SAMPLE, "", "110", "39", List.of()),
             mock(PlaceNormalizationQueryService.class),
-            new TourApiCollectionPlanService(service));
+            new TourApiCollectionPlanService(service, manualTargets()));
     assertThatThrownBy(() -> runner.run(new DefaultApplicationArguments()))
         .isInstanceOf(IllegalArgumentException.class);
     org.mockito.Mockito.verifyNoInteractions(service);
@@ -214,6 +231,7 @@ class TourApiRawCollectionRunnerTest {
     new ApplicationContextRunner()
         .withUserConfiguration(TourApiRawCollectionRunner.class, TourApiCollectionPlanService.class)
         .withBean(TourApiRawCollectionService.class, () -> service)
+        .withBean(TourApiCollectionTargetQueryService.class, this::manualTargets)
         .withBean(
             PlaceNormalizationQueryService.class, () -> mock(PlaceNormalizationQueryService.class))
         .withPropertyValues(
@@ -252,7 +270,7 @@ class TourApiRawCollectionRunnerTest {
               service,
               properties,
               mock(PlaceNormalizationQueryService.class),
-              new TourApiCollectionPlanService(service));
+              new TourApiCollectionPlanService(service, manualTargets()));
       assertThatThrownBy(() -> runner.run(new DefaultApplicationArguments()))
           .isInstanceOf(IllegalArgumentException.class);
     }

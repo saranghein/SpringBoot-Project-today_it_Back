@@ -10,18 +10,24 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.todayit.place.client.external.PlaceSourceException;
+import com.todayit.place.raw.config.NationwideCollectionProperties;
 import com.todayit.place.raw.service.command.TourApiCollectionScope;
 import com.todayit.place.raw.service.model.RawCollectionResult;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /** 여러 범위 순차 수집의 순서·집계·오류별 중단 경계를 검증합니다. */
 class TourApiCollectionPlanServiceTest {
 
   private final TourApiRawCollectionService collection = mock(TourApiRawCollectionService.class);
-  private final TourApiCollectionPlanService service = new TourApiCollectionPlanService(collection);
+  private final TourApiCollectionPlanService service =
+      new TourApiCollectionPlanService(
+          collection,
+          new TourApiCollectionTargetQueryService(
+              new JdbcTemplate(), new NationwideCollectionProperties(false, List.of())));
   private final TourApiCollectionScope first = new TourApiCollectionScope("11", "", "12");
   private final TourApiCollectionScope second = new TourApiCollectionScope("26", "110", "39");
 

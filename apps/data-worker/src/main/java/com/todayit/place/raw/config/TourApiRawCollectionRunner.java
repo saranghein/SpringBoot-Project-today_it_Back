@@ -48,8 +48,10 @@ public class TourApiRawCollectionRunner implements ApplicationRunner {
     }
     var result =
         switch (properties.mode()) {
-          case SAMPLE -> planService.collect(properties.toScopes(), properties.limit(), false);
-          case FULL -> planService.collect(properties.toScopes(), properties.limit(), true);
+          case SAMPLE ->
+              planService.collect(planService.findScopes(properties), properties.limit(), false);
+          case FULL ->
+              planService.collect(planService.findScopes(properties), properties.limit(), true);
           case RETRY_FAILED -> collectionService.retryFailed(properties.limit());
           case NORMALIZE -> throw new IllegalStateException("정제 모드는 수집을 수행할 수 없습니다.");
         };

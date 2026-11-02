@@ -1,5 +1,6 @@
 package com.todayit.place.raw.service;
 
+import com.todayit.place.raw.config.RawCollectionProperties;
 import com.todayit.place.raw.service.command.TourApiCollectionScope;
 import com.todayit.place.raw.service.model.RawCollectionResult;
 import java.util.List;
@@ -18,14 +19,29 @@ public class TourApiCollectionPlanService {
 
   private static final Logger LOG = LoggerFactory.getLogger(TourApiCollectionPlanService.class);
   private final TourApiRawCollectionService collection;
+  private final TourApiCollectionTargetQueryService targets;
 
   /**
    * 개별 범위의 수집 서비스를 주입합니다.
    *
    * @param collection 원본 수집 서비스
+   * @param targets 수동 또는 DB 시도별 수집 범위 조회
    */
-  public TourApiCollectionPlanService(TourApiRawCollectionService collection) {
+  public TourApiCollectionPlanService(
+      TourApiRawCollectionService collection, TourApiCollectionTargetQueryService targets) {
     this.collection = collection;
+    this.targets = targets;
+  }
+
+  /**
+   * 수동 또는 전국 대상 목록을 외부 호출 전에 확정합니다. DB 조회 트랜잭션은 이 메서드가 반환하기 전에 끝납니다.
+   *
+   * @param properties 수집 범위 설정
+   * @return 검증된 불변 수집 범위
+   */
+  @Transactional(propagation = Propagation.NEVER)
+  public List<TourApiCollectionScope> findScopes(RawCollectionProperties properties) {
+    return targets.findScopes(properties);
   }
 
   /**

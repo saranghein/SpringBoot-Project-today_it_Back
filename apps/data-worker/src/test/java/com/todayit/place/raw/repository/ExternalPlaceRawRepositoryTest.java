@@ -19,10 +19,12 @@ import com.todayit.place.client.external.PlaceDataSource.SourcePageRequest;
 import com.todayit.place.client.external.PlaceDataSourceRegistry;
 import com.todayit.place.client.external.PlaceSourceException;
 import com.todayit.place.client.external.PlaceSourceException.Reason;
+import com.todayit.place.raw.config.NationwideCollectionProperties;
 import com.todayit.place.raw.service.ExternalPlaceRawCommandService;
 import com.todayit.place.raw.service.ExternalPlaceRawQueryService;
 import com.todayit.place.raw.service.PlaceNormalizationQueryService;
 import com.todayit.place.raw.service.TourApiCollectionPlanService;
+import com.todayit.place.raw.service.TourApiCollectionTargetQueryService;
 import com.todayit.place.raw.service.TourApiRawCollectionService;
 import com.todayit.place.raw.service.command.TourApiCollectionScope;
 import com.todayit.place.raw.service.model.PlaceNormalizationResult.Status;
@@ -212,7 +214,11 @@ class ExternalPlaceRawRepositoryTest {
                       : "[{\"contentid\":\"" + request.sourceId() + "\",\"title\":\"장소\"}]";
               return new SourceComponent(request.sourceId(), request.component(), payload, FIRST);
             });
-    var plan = new TourApiCollectionPlanService(collectionService);
+    var plan =
+        new TourApiCollectionPlanService(
+            collectionService,
+            new TourApiCollectionTargetQueryService(
+                new JdbcTemplate(), new NationwideCollectionProperties(false, List.of())));
     var targets =
         List.of(
             new TourApiCollectionScope("11", "", "12"),

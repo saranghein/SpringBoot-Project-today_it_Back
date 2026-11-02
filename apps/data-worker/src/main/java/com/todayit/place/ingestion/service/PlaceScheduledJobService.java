@@ -85,7 +85,8 @@ public class PlaceScheduledJobService {
     try {
       if (type == JobType.COLLECT_AND_INGEST) {
         collected =
-            collection.collect(collectionProperties.toScopes(), collectionProperties.limit(), true);
+            collection.collect(
+                collection.findScopes(collectionProperties), collectionProperties.limit(), true);
         stage = "HISTORY_ERROR";
         history.collected(id, collected);
         if (collected.stoppedEarly()) {
