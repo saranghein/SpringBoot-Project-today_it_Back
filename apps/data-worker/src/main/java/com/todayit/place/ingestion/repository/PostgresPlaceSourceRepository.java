@@ -11,14 +11,16 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
-/** 원천 연결·장소 기본값·지역 연결·이미지 URL을 호출자의 PostgreSQL 트랜잭션에서 저장합니다. */
+/** 원천 연결·장소 기본값과 방문 안내·지역 연결·이미지 URL을 호출자의 PostgreSQL 트랜잭션에서 저장합니다. */
 @Repository
 @ConditionalOnProperty(name = "todayit.place.upsert.enabled", havingValue = "true")
 public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
 
   private static final Logger LOG = LoggerFactory.getLogger(PostgresPlaceSourceRepository.class);
   private final EntityManager entityManager;
+  private final JsonMapper json = JsonMapper.builder().build();
 
   /**
    * @param entityManager worker의 JPA 저장 세션
@@ -150,8 +152,9 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
             bindPlace(
                     entityManager.createNativeQuery(
                         """
-        INSERT INTO place (name, latitude, longitude, address, category, description, is_active, is_deleted)
-        VALUES (:name, :latitude, :longitude, :address, :category, :description, true, false)
+        INSERT INTO place (name, latitude, longitude, address, category, description, visitor_info, is_active, is_deleted)
+        VALUES (:name, :latitude, :longitude, :address, :category, :description,
+                CAST(:visitorInfo AS jsonb), true, false)
         RETURNING place_id
         """),
                     place)
@@ -160,7 +163,7 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
   }
 
   /**
-   * 원천 기본정보만 갱신합니다. 소개 누락·조회수·활성/삭제 상태·생성 시각과 사용자 관계를 보존합니다.
+   * 원천 기본정보와 방문 안내를 갱신합니다. 소개나 방문 안내가 비어 있으면 기존 값을 보존합니다.
    *
    * @param placeId 연결된 서비스 장소 ID
    * @param place 새 정제 값
@@ -174,7 +177,9 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
         UPDATE place
         SET name = :name, latitude = :latitude, longitude = :longitude,
             address = :address, category = :category,
-            description = COALESCE(:description, description), updated_at = CURRENT_TIMESTAMP
+            description = COALESCE(:description, description),
+            visitor_info = COALESCE(CAST(:visitorInfo AS jsonb), visitor_info),
+            updated_at = CURRENT_TIMESTAMP
         WHERE place_id = :placeId
         """),
                 place)
@@ -199,6 +204,9 @@ public class PostgresPlaceSourceRepository implements PlaceSourceRepository {
         .setParameter("longitude", place.longitude())
         .setParameter("address", place.address())
         .setParameter("category", place.category().name())
-        .setParameter("description", place.description());
+        .setParameter("description", place.description())
+        .setParameter(
+            "visitorInfo",
+            place.introduction().isEmpty() ? null : json.writeValueAsString(place.introduction()));
   }
 }

@@ -6,6 +6,7 @@ import com.todayit.place.raw.service.model.PlaceNormalizationResult.Status;
 import com.todayit.place.raw.service.model.RawPlaceSnapshot;
 import com.todayit.place.raw.support.PlaceDescriptionText;
 import com.todayit.place.raw.support.TourApiCategoryMapping;
+import com.todayit.place.raw.support.TourApiIntroductionMapping;
 import com.todayit.place.service.model.NormalizedPlace;
 import com.todayit.place.service.model.NormalizedPlace.Category;
 import com.todayit.place.service.model.NormalizedPlace.Image;
@@ -97,6 +98,8 @@ public class TourApiPlaceNormalizationService {
               sigungu,
               categoryCode,
               description(common),
+              TourApiIntroductionMapping.normalize( // 상세 소개
+                  list.path("contenttypeid").asText("").strip(), payload.path("intro").path(0)),
               images(payload.path("images")));
       return result(raw, Status.NORMALIZED, null, place);
     } catch (InvalidValue exception) {

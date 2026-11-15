@@ -18,6 +18,7 @@ import com.todayit.place.service.model.NormalizedPlace;
 import com.todayit.place.service.model.NormalizedPlace.Category;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -131,6 +132,7 @@ class PlaceUpsertCommandServiceTest {
             "110",
             "VE030100",
             null,
+            Map.of(),
             List.of()));
   }
 }

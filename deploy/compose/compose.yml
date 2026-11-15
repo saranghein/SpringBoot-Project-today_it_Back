@@ -144,6 +144,8 @@ services:
 
   postgres:
     image: postgres:17-alpine
+    ports:
+      - "5432:5432"
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-todayit}

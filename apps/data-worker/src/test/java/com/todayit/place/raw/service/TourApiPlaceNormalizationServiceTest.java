@@ -8,6 +8,7 @@ import com.todayit.place.raw.service.model.PlaceNormalizationResult.Status;
 import com.todayit.place.raw.service.model.RawPlaceSnapshot;
 import com.todayit.place.service.model.NormalizedPlace;
 import com.todayit.place.service.model.NormalizedPlace.Category;
+import com.todayit.place.service.model.NormalizedPlace.IntroductionField;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -39,7 +40,52 @@ class TourApiPlaceNormalizationServiceTest {
     assertThat(result.place().longitude().toPlainString()).isEqualTo("127.00000001");
     assertThat(result.place().sidoCode()).isEqualTo("11");
     assertThat(result.place().sigunguCode()).isEqualTo("110");
+    assertThat(result.place().introduction()).isEmpty();
     assertThat(payload.toString()).isEqualTo(original);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "12,parking,expguide,EXPERIENCE_GUIDE",
+    "14,parkingculture,parkingfee,PARKING_FEE",
+    "28,parkingleports,reservation,RESERVATION",
+    "38,parkingshopping,restroom,RESTROOM",
+    "39,parkingfood,packing,TAKEOUT"
+  })
+  void normalizesIntroductionBySourceType(
+      String type, String parkingKey, String otherKey, IntroductionField otherField) {
+    ObjectNode payload = payload();
+    list(payload).put("contenttypeid", type);
+    ObjectNode intro = (ObjectNode) payload.path("intro").path(0);
+    intro.put(parkingKey, " 가능<br>최초 2시간 무료 ");
+    intro.put(otherKey, "불가");
+    intro.put("opentimefood", "<p>&nbsp;</p>");
+    intro.put("chkcreditcardfood", " ");
+    intro.put("seat", 40);
+
+    var introduction = normalize(payload).place().introduction();
+
+    assertThat(introduction)
+        .containsEntry(IntroductionField.PARKING, "가능\n최초 2시간 무료")
+        .containsEntry(otherField, "불가")
+        .doesNotContainKeys(IntroductionField.OPENING_HOURS, IntroductionField.CARD_PAYMENT);
+    if ("39".equals(type)) {
+      assertThat(introduction).containsEntry(IntroductionField.SEAT_COUNT, "40").hasSize(3);
+    } else {
+      assertThat(introduction).hasSize(2);
+    }
+  }
+
+  @Test
+  void skipsIntroductionForUnsupportedSourceType() {
+    ObjectNode payload = payload();
+    list(payload).put("contenttypeid", "15");
+    ((ObjectNode) payload.path("intro").path(0)).put("parking", "가능");
+
+    PlaceNormalizationResult result = normalize(payload);
+
+    assertThat(result.status()).isEqualTo(Status.NORMALIZED);
+    assertThat(result.place().introduction()).isEmpty();
   }
 
   /**

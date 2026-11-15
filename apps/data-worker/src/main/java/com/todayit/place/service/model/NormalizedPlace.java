@@ -2,6 +2,7 @@ package com.todayit.place.service.model;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 정제와 저장에서 함께 사용하는 불변 장소 값입니다. 지역 ID와 서비스 장소 ID는 저장 시 결정합니다.
@@ -15,6 +16,7 @@ import java.util.List;
  * @param sigunguCode 법정동 시군구 코드 3자리
  * @param sourceCategoryCode 원천 소분류 코드
  * @param description 일반 텍스트 소개, 없으면 null
+ * @param introduction 정제한 편의시설·서비스·운영 안내. 값이 없으면 빈 맵
  * @param images 정제한 원천 이미지. 저장 시 원본 URL만 반영하며 메타데이터는 원본 payload에 보존
  */
 public record NormalizedPlace(
@@ -27,10 +29,11 @@ public record NormalizedPlace(
     String sigunguCode,
     String sourceCategoryCode,
     String description,
+    Map<IntroductionField, String> introduction,
     List<Image> images) {
 
   /**
-   * 이미지 후보 목록을 복사하여 후속 변경을 막습니다.
+   * 소개 항목과 이미지 후보를 복사하여 후속 변경을 막습니다.
    *
    * @param name 장소명
    * @param address 주소
@@ -41,10 +44,37 @@ public record NormalizedPlace(
    * @param sigunguCode 시군구 코드
    * @param sourceCategoryCode 원천 소분류
    * @param description 일반 텍스트 소개
+   * @param introduction 정제한 편의시설·서비스·운영 안내
    * @param images 이미지 후보
    */
   public NormalizedPlace {
+    introduction = Map.copyOf(introduction);
     images = List.copyOf(images);
+  }
+
+  /** 원천 관광타입에 관계없이 같은 의미로 쓰는 소개 항목입니다. */
+  public enum IntroductionField {
+    ADMISSION_FEE,
+    CARD_PAYMENT,
+    CHILDREN_PLAYROOM,
+    CLOSED_DAYS,
+    DISCOUNT,
+    EXPERIENCE_AGE,
+    EXPERIENCE_GUIDE,
+    MARKET_DAYS,
+    OPENING_HOURS,
+    OPEN_SEASON,
+    PARKING,
+    PARKING_FEE,
+    PET_ACCESS,
+    RESERVATION,
+    RESTROOM,
+    SEAT_COUNT,
+    SHOP_GUIDE,
+    SMOKING_POLICY,
+    STROLLER_RENTAL,
+    TAKEOUT,
+    VISIT_DURATION
   }
 
   /** 정제된 장소의 서비스 카테고리입니다. */
