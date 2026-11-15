@@ -9,6 +9,7 @@ import com.todayit.place.raw.service.model.RawPlaceSnapshot;
 import com.todayit.place.service.model.NormalizedPlace;
 import com.todayit.place.service.model.NormalizedPlace.Category;
 import com.todayit.place.service.model.NormalizedPlace.IntroductionField;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -52,6 +53,7 @@ class TourApiPlaceNormalizationServiceTest {
    * @param otherKey 함께 검증할 원천 필드명
    * @param otherField 기대하는 정제 항목 코드
    */
+  @DisplayName("원천 유형별로 소개 항목을 정제하고 빈 값은 제외한다")
   @ParameterizedTest
   @CsvSource({
     "12,parking,expguide,EXPERIENCE_GUIDE",
@@ -62,6 +64,7 @@ class TourApiPlaceNormalizationServiceTest {
   })
   void normalizesIntroductionBySourceType(
       String type, String parkingKey, String otherKey, IntroductionField otherField) {
+    // given
     ObjectNode payload = payload();
     list(payload).put("contenttypeid", type);
     ObjectNode intro = (ObjectNode) payload.path("intro").path(0);
@@ -71,8 +74,10 @@ class TourApiPlaceNormalizationServiceTest {
     intro.put("chkcreditcardfood", " ");
     intro.put("seat", 40);
 
+    // when
     var introduction = normalize(payload).place().introduction();
 
+    // then
     assertThat(introduction)
         .containsEntry(IntroductionField.PARKING, "가능\n최초 2시간 무료")
         .containsEntry(otherField, "불가")
@@ -86,13 +91,17 @@ class TourApiPlaceNormalizationServiceTest {
 
   /** 미지원 원본의 소개 항목이 빈 결과로 정제되는지 검증합니다. */
   @Test
+  @DisplayName("미지원 원천 유형의 소개 항목은 비어 있다")
   void skipsIntroductionForUnsupportedSourceType() {
+    // given
     ObjectNode payload = payload();
     list(payload).put("contenttypeid", "15");
     ((ObjectNode) payload.path("intro").path(0)).put("parking", "가능");
 
+    // when
     PlaceNormalizationResult result = normalize(payload);
 
+    // then
     assertThat(result.status()).isEqualTo(Status.NORMALIZED);
     assertThat(result.place().introduction()).isEmpty();
   }

@@ -31,6 +31,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -140,7 +141,9 @@ class PostgresPlaceSourceRepositoryTest {
 
   /* 편의 시설 저장 */
   @Test
+  @DisplayName("소개 정보를 저장하고 재적재 시 같은 장소의 값을 갱신한다")
   void storesVisitorInfoFromRawIntroductionAndUpdatesTheSamePlace() {
+    // given
     successfulRaw("001", "VE030100", "110");
     jdbc.update(
         """
@@ -151,27 +154,41 @@ class PostgresPlaceSourceRepositoryTest {
         WHERE source_id = '001'
         """);
 
-    assertThat(ingestionService.ingestAllTourApi(10).stored()).isEqualTo(1);
+    // when
+    PlaceIngestionResult first = ingestionService.ingestAllTourApi(10);
+
+    // then
+    assertThat(first.stored()).isEqualTo(1);
     Integer placeId = jdbc.queryForObject("SELECT place_id FROM place", Integer.class);
     String parkingSql = "SELECT visitor_info ->> 'PARKING' FROM place WHERE place_id = ?";
     assertThat(jdbc.queryForObject(parkingSql, String.class, placeId)).isEqualTo("가능\n2시간 무료");
 
+    // given
     jdbc.update(
         """
         UPDATE external_place_raw
         SET payload = jsonb_set(payload, '{intro,0,parking}', to_jsonb('불가'::text))
         WHERE source_id = '001'
         """);
-    assertThat(ingestionService.ingestAllTourApi(10).stored()).isEqualTo(1);
+    // when
+    PlaceIngestionResult updated = ingestionService.ingestAllTourApi(10);
+
+    // then
+    assertThat(updated.stored()).isEqualTo(1);
     assertThat(jdbc.queryForObject(parkingSql, String.class, placeId)).isEqualTo("불가");
 
+    // given
     jdbc.update(
         """
         UPDATE external_place_raw
         SET payload = payload #- '{intro,0,parking}'
         WHERE source_id = '001'
         """);
-    assertThat(ingestionService.ingestAllTourApi(10).stored()).isEqualTo(1);
+    // when
+    PlaceIngestionResult missing = ingestionService.ingestAllTourApi(10);
+
+    // then
+    assertThat(missing.stored()).isEqualTo(1);
     assertThat(jdbc.queryForObject(parkingSql, String.class, placeId)).isEqualTo("불가");
     assertThat(count("place")).isEqualTo(1);
   }
