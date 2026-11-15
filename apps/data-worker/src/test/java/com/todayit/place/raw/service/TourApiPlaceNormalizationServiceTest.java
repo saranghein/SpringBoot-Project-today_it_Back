@@ -44,6 +44,14 @@ class TourApiPlaceNormalizationServiceTest {
     assertThat(payload.toString()).isEqualTo(original);
   }
 
+  /**
+   *  유형별 소개 항목을 매핑하고 빈 값은 제외하는지 검증합니다.
+   *
+   * @param type 원천 관광타입 코드
+   * @param parkingKey 원천 주차 필드명
+   * @param otherKey 함께 검증할 원천 필드명
+   * @param otherField 기대하는 정제 항목 코드
+   */
   @ParameterizedTest
   @CsvSource({
     "12,parking,expguide,EXPERIENCE_GUIDE",
@@ -76,6 +84,7 @@ class TourApiPlaceNormalizationServiceTest {
     }
   }
 
+  /** 미지원 원본의 소개 항목이 빈 결과로 정제되는지 검증합니다. */
   @Test
   void skipsIntroductionForUnsupportedSourceType() {
     ObjectNode payload = payload();
